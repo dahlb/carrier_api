@@ -58,6 +58,7 @@ class Status:
     filter_used: int = None
     is_disconnected: bool = None
     zones: [StatusZone] = None
+    raw_status_json: dict = None
 
     def __init__(
         self,
@@ -67,14 +68,14 @@ class Status:
         self.refresh()
 
     def refresh(self):
-        status_json = self.system.api_connection.get_status(system_serial=self.system.serial)
-        self.outdoor_temperature = int(status_json["oat"])
-        self.mode = status_json["mode"]
-        self.temperature_unit = status_json["cfgem"]
-        self.filter_used = status_json["filtrlvl"]
-        self.is_disconnected = status_json["isDisconnected"]
+        self.raw_status_json = self.system.api_connection.get_status(system_serial=self.system.serial)
+        self.outdoor_temperature = int(self.raw_status_json["oat"])
+        self.mode = self.raw_status_json["mode"]
+        self.temperature_unit = self.raw_status_json["cfgem"]
+        self.filter_used = self.raw_status_json["filtrlvl"]
+        self.is_disconnected = self.raw_status_json["isDisconnected"]
         self.zones = []
-        for zone_json in status_json["zones"]["zone"]:
+        for zone_json in self.raw_status_json["zones"]["zone"]:
             if zone_json["enabled"] == "on":
                 self.zones.append(StatusZone(zone_json))
 

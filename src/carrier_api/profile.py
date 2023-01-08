@@ -8,6 +8,7 @@ class Profile:
     outdoor_model: str = None
     outdoor_serial: str = None
     zone_ids: [str] = None
+    raw_profile_json: dict = None
 
     def __init__(
         self,
@@ -17,16 +18,16 @@ class Profile:
         self.refresh()
 
     def refresh(self):
-        profile_json = self.system.api_connection.get_profile(system_serial=self.system.serial)
-        self.model = profile_json["model"]
-        self.brand = profile_json["brand"]
-        self.firmware = profile_json["firmware"]
-        self.indoor_model = profile_json["indoorModel"]
-        self.indoor_serial = profile_json["indoorSerial"]
-        self.outdoor_model = profile_json["outdoorModel"]
-        self.outdoor_serial = profile_json["outdoorSerial"]
+        self.raw_profile_json = self.system.api_connection.get_profile(system_serial=self.system.serial)
+        self.model = self.raw_profile_json["model"]
+        self.brand = self.raw_profile_json["brand"]
+        self.firmware = self.raw_profile_json["firmware"]
+        self.indoor_model = self.raw_profile_json["indoorModel"]
+        self.indoor_serial = self.raw_profile_json["indoorSerial"]
+        self.outdoor_model = self.raw_profile_json["outdoorModel"]
+        self.outdoor_serial = self.raw_profile_json["outdoorSerial"]
         self.zone_ids = []
-        for zone in profile_json["zones"]["zone"]:
+        for zone in self.raw_profile_json["zones"]["zone"]:
             if zone["present"] == "on":
                 self.zone_ids.append(zone["$"]["id"])
 

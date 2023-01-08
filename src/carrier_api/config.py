@@ -103,6 +103,7 @@ class Config:
     limit_min: int = None
     limit_max: int = None
     zones: [ConfigZone] = None
+    raw_config_json: dict = None
 
     def __init__(
         self,
@@ -112,22 +113,22 @@ class Config:
         self.refresh()
 
     def refresh(self):
-        config_json = self.system.api_connection.get_config(system_serial=self.system.serial)
-        self.temperature_unit = config_json["cfgem"]
-        self.static_pressure = config_json["staticPressure"]
-        self.mode = config_json["mode"]
-        self.limit_min = int(config_json["utilityEvent"]["minLimit"])
-        self.limit_max = int(config_json["utilityEvent"]["maxLimit"])
+        self.raw_config_json = self.system.api_connection.get_config(system_serial=self.system.serial)
+        self.temperature_unit = self.raw_config_json["cfgem"]
+        self.static_pressure = self.raw_config_json["staticPressure"]
+        self.mode = self.raw_config_json["mode"]
+        self.limit_min = int(self.raw_config_json["utilityEvent"]["minLimit"])
+        self.limit_max = int(self.raw_config_json["utilityEvent"]["maxLimit"])
         vacation_json = {
             "$": {
                 "id": "vacation"
             },
-            "clsp": config_json["vacmaxt"],
-            "htsp": config_json["vacmint"],
-            "fan": config_json["vacfan"]
+            "clsp": self.raw_config_json["vacmaxt"],
+            "htsp": self.raw_config_json["vacmint"],
+            "fan": self.raw_config_json["vacfan"]
         }
         self.zones = []
-        for zone_json in config_json["zones"]["zone"]:
+        for zone_json in self.raw_config_json["zones"]["zone"]:
             if zone_json["enabled"] == "on":
                 self.zones.append(ConfigZone(zone_json=zone_json, vacation_json=vacation_json))
 
