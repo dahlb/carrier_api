@@ -6,7 +6,7 @@ here = pathlib.Path(__file__).parent.resolve()
 # Get the long description from the README file
 LONG_DESCRIPTION = (here / "README.md").read_text(encoding="utf-8")
 
-VERSION = "1.7.0"
+VERSION = "1.0.0"
 
 # Setting up
 setup(
@@ -23,7 +23,7 @@ setup(
     keywords=["carrier", "api"],
     classifiers=[
         "Development Status :: 4 - Beta",
-        "Framework :: AsyncIO",
+        "Framework :: Requests",
         "License :: OSI Approved :: MIT License",
         "Natural Language :: English",
         "Intended Audience :: Developers",
