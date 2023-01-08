@@ -1,2 +1,2 @@
-python3 -m build --sdist --wheel --outdir dist/ .
+python setup.py install
 twine upload dist/*

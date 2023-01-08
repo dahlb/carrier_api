@@ -23,7 +23,6 @@ setup(
     keywords=["carrier", "api"],
     classifiers=[
         "Development Status :: 4 - Beta",
-        "Framework :: Requests",
         "License :: OSI Approved :: MIT License",
         "Natural Language :: English",
         "Intended Audience :: Developers",

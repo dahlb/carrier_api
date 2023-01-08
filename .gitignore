@@ -4,5 +4,5 @@
 **@eaDir
 venv/
 dist/
-src/blueair_api.egg-info/
+src/carrier_api.egg-info/
 build/
