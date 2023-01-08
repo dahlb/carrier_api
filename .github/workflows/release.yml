@@ -14,6 +14,8 @@ jobs:
       - name: Gets semantic release info
         id: semantic_release_info
         uses: jossef/action-semantic-release-info@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Update Version and Commit
         if: ${{steps.semantic_release_info.outputs.version != ''}}
@@ -30,11 +32,14 @@ jobs:
         if: ${{steps.semantic_release_info.outputs.version != ''}}
         uses: ad-m/github-push-action@v0.6.0
         with:
+          github_token: ${{ github.token }}
           tags: true
 
       - name: Create GitHub Release
         if: ${{steps.semantic_release_info.outputs.version != ''}}
         uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           tag_name: ${{ steps.semantic_release_info.outputs.git_tag }}
           release_name: ${{ steps.semantic_release_info.outputs.git_tag }}
@@ -42,10 +47,10 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.9
         uses: actions/setup-python@v1
         with:
-          python-version: 3.10
+          python-version: 3.9
 
       - name: Install pypa/build
         run: >-
