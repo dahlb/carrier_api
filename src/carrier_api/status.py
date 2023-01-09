@@ -1,6 +1,6 @@
 import logging
 
-from .const import MODE_HEAT, MODE_COOL, MODE_OFF, SystemModes
+from .const import SystemModes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,11 +26,11 @@ class StatusZone:
     def zone_conditioning_const(self) -> str:
         match self.conditioning:
             case 'active_heat' | 'prep_heat' | 'pending_heat':
-                return MODE_HEAT
+                return SystemModes.HEAT
             case 'active_cool' | 'prep_cool' | 'pending_cool':
-                return MODE_COOL
+                return SystemModes.COOL
             case 'idle':
-                return MODE_OFF
+                return SystemModes.OFF
 
     def __repr__(self):
         return {
