@@ -32,3 +32,8 @@ class FanModes(Enum):
     LOW = 'low'
     MED = 'med'
     HIGH = 'high'
+
+
+class TemperatureUnits(Enum):
+    CELSIUS = "C"
+    FAHRENHEIT = "F"

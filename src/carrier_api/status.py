@@ -1,6 +1,6 @@
 import logging
 
-from .const import SystemModes
+from .const import SystemModes, TemperatureUnits
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class Status:
         self.raw_status_json = self.system.api_connection.get_status(system_serial=self.system.serial)
         self.outdoor_temperature = int(self.raw_status_json["oat"])
         self.mode = self.raw_status_json["mode"]
-        self.temperature_unit = self.raw_status_json["cfgem"]
+        self.temperature_unit = TemperatureUnits(self.raw_status_json["cfgem"])
         self.filter_used = self.raw_status_json["filtrlvl"]
         self.is_disconnected = self.raw_status_json["isDisconnected"]
         self.zones = []

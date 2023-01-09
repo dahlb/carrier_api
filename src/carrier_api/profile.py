@@ -1,5 +1,4 @@
 class Profile:
-    name: str = None
     model: str = None
     brand: str = None
     firmware: str = None
