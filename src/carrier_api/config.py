@@ -89,14 +89,17 @@ class ConfigZone:
         return active_schedule_periods(tomorrow_schedule["period"])[0]["time"]
 
     def __repr__(self):
-        return {
-            "api_id": self.api_id,
+        builder = {
+            "api_id": self.api_id.value,
             "name": self.name,
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,
-            "activities": map(lambda activity: activity.__repr__(), self.activities),
+            "activities": list(map(lambda activity: activity.__repr__(), self.activities)),
         }
+        if self.hold_activity is not None:
+            builder["hold_activity"] = self.hold_activity.value
+        return builder
 
     def __str__(self):
         builder = self.__repr__()
@@ -151,7 +154,7 @@ class Config:
             "mode": self.mode,
             "limit_min": self.limit_min,
             "limit_max": self.limit_max,
-            "zones": map(lambda zone: zone.__repr__(), self.zones),
+            "zones": list(map(lambda zone: zone.__repr__(), self.zones)),
         }
 
     def __str__(self):

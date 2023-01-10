@@ -68,11 +68,11 @@ class Status:
         self.raw_status_json = self.system.api_connection.get_status(
             system_serial=self.system.serial
         )
-        self.outdoor_temperature = int(self.raw_status_json["oat"])
-        self.mode = self.raw_status_json["mode"]
-        self.temperature_unit = TemperatureUnits(self.raw_status_json["cfgem"])
-        self.filter_used = self.raw_status_json["filtrlvl"]
-        self.is_disconnected = self.raw_status_json["isDisconnected"]
+        self.outdoor_temperature: float = float(self.raw_status_json["oat"])
+        self.mode: str = self.raw_status_json["mode"]
+        self.temperature_unit: TemperatureUnits = TemperatureUnits(self.raw_status_json["cfgem"])
+        self.filter_used: int = self.raw_status_json["filtrlvl"]
+        self.is_disconnected: bool = self.raw_status_json["isDisconnected"]
         self.zones = []
         for zone_json in self.raw_status_json["zones"]["zone"]:
             if zone_json["enabled"] == "on":
@@ -90,10 +90,10 @@ class Status:
         return {
             "outdoor_temperature": self.outdoor_temperature,
             "mode": self.mode,
-            "temperature_unit": self.temperature_unit,
+            "temperature_unit": self.temperature_unit.value,
             "filter_used": self.filter_used,
             "is_disconnected": self.is_disconnected,
-            "zones": map(lambda zone: zone.__repr__(), self.zones),
+            "zones": list(map(lambda zone: zone.__repr__(), self.zones)),
         }
 
     def __str__(self):
