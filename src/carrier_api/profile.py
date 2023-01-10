@@ -17,7 +17,9 @@ class Profile:
         self.refresh()
 
     def refresh(self):
-        self.raw_profile_json = self.system.api_connection.get_profile(system_serial=self.system.serial)
+        self.raw_profile_json = self.system.api_connection.get_profile(
+            system_serial=self.system.serial
+        )
         self.model = self.raw_profile_json["model"]
         self.brand = self.raw_profile_json["brand"]
         self.firmware = self.raw_profile_json["firmware"]

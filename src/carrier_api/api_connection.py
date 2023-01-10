@@ -90,7 +90,13 @@ class ApiConnection:
         for location in response_json["locations"]["location"]:
             for system in location["systems"]["system"]:
                 system_obj = system["atom:link"]["$"]
-                systems.append(System(api_connection=self, serial=system_obj["href"].split("/")[-1], name=system_obj["title"]))
+                systems.append(
+                    System(
+                        api_connection=self,
+                        serial=system_obj["href"].split("/")[-1],
+                        name=system_obj["title"],
+                    )
+                )
         return systems
 
     def get_profile(self, system_serial: str) -> dict:
@@ -110,45 +116,60 @@ class ApiConnection:
         self._post(url=url, data=data)
 
     def set_config_mode(self, system_serial: str, mode: str):
-        data = {
-            "config": {
-                "mode": mode
-            }
-        }
+        data = {"config": {"mode": mode}}
         self.update_config(system_serial=system_serial, data=data)
 
-    def set_config_hold(self, system_serial: str, zone_id: str, activity_name: ActivityNames, hold_until: str = None):
+    def set_config_hold(
+        self,
+        system_serial: str,
+        zone_id: str,
+        activity_name: ActivityNames,
+        hold_until: str = None,
+    ):
         data = {
             "config": {
-                'zones': {
-                    'zone': [{
-                        '@id': zone_id,
-                        'hold': 'on',
-                        "holdActivity": activity_name.value,
-                        "otmr": hold_until,
-                    }]
+                "zones": {
+                    "zone": [
+                        {
+                            "@id": zone_id,
+                            "hold": "on",
+                            "holdActivity": activity_name.value,
+                            "otmr": hold_until,
+                        }
+                    ]
                 }
             }
         }
         self.update_config(system_serial=system_serial, data=data)
 
-    def set_config_manual_activity(self, system_serial: str, zone_id: str, heat_set_point: int, cool_set_point: int, fan_mode: FanModes):
+    def set_config_manual_activity(
+        self,
+        system_serial: str,
+        zone_id: str,
+        heat_set_point: int,
+        cool_set_point: int,
+        fan_mode: FanModes,
+    ):
         data = {
             "config": {
-                'zones': {
-                    'zone': [{
-                        '@id': zone_id,
-                        'hold': 'on',
-                        "holdActivity": ActivityNames.MANUAL.value,
-                        'activities': {
-                            'activity': [{
-                                "@id": "manual",
-                                'htsp': heat_set_point,
-                                'clsp': cool_set_point,
-                                'fan': fan_mode.value,
-                            }]
-                        },
-                    }]
+                "zones": {
+                    "zone": [
+                        {
+                            "@id": zone_id,
+                            "hold": "on",
+                            "holdActivity": ActivityNames.MANUAL.value,
+                            "activities": {
+                                "activity": [
+                                    {
+                                        "@id": "manual",
+                                        "htsp": heat_set_point,
+                                        "clsp": cool_set_point,
+                                        "fan": fan_mode.value,
+                                    }
+                                ]
+                            },
+                        }
+                    ]
                 }
             }
         }

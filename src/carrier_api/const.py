@@ -11,27 +11,27 @@ INFINITY_API_CONSUMER_SECRET = "0f5ur7d89sjv8d45"
 
 
 class SystemModes(Enum):
-    OFF = 'off'
-    COOL = 'cool'
-    HEAT = 'heat'
-    AUTO = 'auto'
-    FAN_ONLY = 'fanonly'
+    OFF = "off"
+    COOL = "cool"
+    HEAT = "heat"
+    AUTO = "auto"
+    FAN_ONLY = "fanonly"
 
 
 class ActivityNames(Enum):
-    HOME = 'home'
-    AWAY = 'away'
-    SLEEP = 'sleep'
-    WAKE = 'wake'
-    MANUAL = 'manual'
-    VACATION = 'vacation'
+    HOME = "home"
+    AWAY = "away"
+    SLEEP = "sleep"
+    WAKE = "wake"
+    MANUAL = "manual"
+    VACATION = "vacation"
 
 
 class FanModes(Enum):
-    OFF = 'off'
-    LOW = 'low'
-    MED = 'med'
-    HIGH = 'high'
+    OFF = "off"
+    LOW = "low"
+    MED = "med"
+    HIGH = "high"
 
 
 class TemperatureUnits(Enum):

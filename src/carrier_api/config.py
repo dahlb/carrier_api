@@ -11,10 +11,7 @@ def active_schedule_periods(periods_json: [dict]):
 
 
 class ConfigZoneActivity:
-    def __init__(
-        self,
-        zone_activity_json: dict
-    ):
+    def __init__(self, zone_activity_json: dict):
         self.api_id = zone_activity_json["$"]["id"]
         self.fan: FanModes = FanModes(zone_activity_json["fan"])
         self.heat_set_point = zone_activity_json["htsp"]
@@ -33,11 +30,7 @@ class ConfigZoneActivity:
 
 
 class ConfigZone:
-    def __init__(
-        self,
-        zone_json: dict,
-        vacation_json: dict
-    ):
+    def __init__(self, zone_json: dict, vacation_json: dict):
         self.api_id = zone_json["$"]["id"]
         self.name = zone_json["name"]
         self.hold_activity = zone_json.get("holdActivity", None)
@@ -46,7 +39,9 @@ class ConfigZone:
         self.program_json = zone_json["program"]
         self.activities = []
         for zone_activity_json in zone_json["activities"]["activity"]:
-            self.activities.append(ConfigZoneActivity(zone_activity_json=zone_activity_json))
+            self.activities.append(
+                ConfigZoneActivity(zone_activity_json=zone_activity_json)
+            )
         self.activities.append(ConfigZoneActivity(zone_activity_json=vacation_json))
 
     def find_activity(self, name: str):
@@ -59,25 +54,33 @@ class ConfigZone:
             return self.find_activity(self.hold_activity)
         else:
             now = datetime.now()
-            sunday_0_index_today = int(now.date().strftime('%w'))
+            sunday_0_index_today = int(now.date().strftime("%w"))
             today_schedule_json = self.program_json["day"][sunday_0_index_today]
-            active_periods = reversed(active_schedule_periods(today_schedule_json["period"]))
+            active_periods = reversed(
+                active_schedule_periods(today_schedule_json["period"])
+            )
             for active_period in active_periods:
                 hours, minutes = active_period["time"]
-                if (int(hours) < now.hour) or (int(hours) == now.hour and int(minutes) < now.minute):
+                if (int(hours) < now.hour) or (
+                    int(hours) == now.hour and int(minutes) < now.minute
+                ):
                     return self.find_activity(active_period["activity"])
             yesterday_schedule = self.program_json["day"][sunday_0_index_today + 8 % 7]
-            yesterday_active_periods = reversed(active_schedule_periods(yesterday_schedule["period"]))
+            yesterday_active_periods = reversed(
+                active_schedule_periods(yesterday_schedule["period"])
+            )
             return self.find_activity(yesterday_active_periods[-1]["activity"])
 
     def next_activity_time(self) -> str:
         now = datetime.now()
-        sunday_0_index_today = int(now.date().strftime('%w'))
+        sunday_0_index_today = int(now.date().strftime("%w"))
         today_schedule_json = self.program_json["day"][sunday_0_index_today]
         active_periods = active_schedule_periods(today_schedule_json["period"])
         for active_period in active_periods:
             hours, minutes = active_period["time"].split(":")
-            if (int(hours) > now.hour) or (int(hours) == now.hour and int(minutes) > now.minute):
+            if (int(hours) > now.hour) or (
+                int(hours) == now.hour and int(minutes) > now.minute
+            ):
                 return active_period["time"]
         tomorrow_schedule = self.program_json["day"][sunday_0_index_today + 1 % 7]
         return active_schedule_periods(tomorrow_schedule["period"])[0]["time"]
@@ -89,11 +92,15 @@ class ConfigZone:
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,
-            "activities": ",".join(map(str, self.activities)),
+            "activities": map(lambda activity: activity.__repr__(), self.activities),
         }
 
     def __str__(self):
-        return f"{self.__repr__()}"
+        builder = self.__repr__()
+        builder["activities"] = ", ".join(
+            map(lambda activity: activity.__str__(), self.activities)
+        )
+        return str(builder)
 
 
 class Config:
@@ -113,24 +120,26 @@ class Config:
         self.refresh()
 
     def refresh(self):
-        self.raw_config_json = self.system.api_connection.get_config(system_serial=self.system.serial)
+        self.raw_config_json = self.system.api_connection.get_config(
+            system_serial=self.system.serial
+        )
         self.temperature_unit = self.raw_config_json["cfgem"]
         self.static_pressure = self.raw_config_json["staticPressure"]
         self.mode = self.raw_config_json["mode"]
         self.limit_min = int(self.raw_config_json["utilityEvent"]["minLimit"])
         self.limit_max = int(self.raw_config_json["utilityEvent"]["maxLimit"])
         vacation_json = {
-            "$": {
-                "id": "vacation"
-            },
+            "$": {"id": "vacation"},
             "clsp": self.raw_config_json["vacmaxt"],
             "htsp": self.raw_config_json["vacmint"],
-            "fan": self.raw_config_json["vacfan"]
+            "fan": self.raw_config_json["vacfan"],
         }
         self.zones = []
         for zone_json in self.raw_config_json["zones"]["zone"]:
             if zone_json["enabled"] == "on":
-                self.zones.append(ConfigZone(zone_json=zone_json, vacation_json=vacation_json))
+                self.zones.append(
+                    ConfigZone(zone_json=zone_json, vacation_json=vacation_json)
+                )
 
     def __repr__(self):
         return {
@@ -139,8 +148,10 @@ class Config:
             "mode": self.mode,
             "limit_min": self.limit_min,
             "limit_max": self.limit_max,
-            "zones": ",".join(map(str, self.zones)),
+            "zones": map(lambda zone: zone.__repr__(), self.zones),
         }
 
     def __str__(self):
-        return f"{self.__repr__()}"
+        builder = self.__repr__()
+        builder["zones"] = ", ".join(map(lambda zone: zone.__str__(), self.zones))
+        return str(builder)

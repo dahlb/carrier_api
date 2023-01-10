@@ -6,10 +6,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class StatusZone:
-    def __init__(
-        self,
-        status_zone_json: dict
-    ):
+    def __init__(self, status_zone_json: dict):
         self.api_id = status_zone_json["$"]["id"]
         self.name = status_zone_json["name"]
         self.current_activity = status_zone_json["currentActivity"]
@@ -25,11 +22,11 @@ class StatusZone:
     @property
     def zone_conditioning_const(self) -> str:
         match self.conditioning:
-            case 'active_heat' | 'prep_heat' | 'pending_heat':
+            case "active_heat" | "prep_heat" | "pending_heat":
                 return SystemModes.HEAT
-            case 'active_cool' | 'prep_cool' | 'pending_cool':
+            case "active_cool" | "prep_cool" | "pending_cool":
                 return SystemModes.COOL
-            case 'idle':
+            case "idle":
                 return SystemModes.OFF
 
     def __repr__(self):
@@ -52,7 +49,7 @@ class StatusZone:
 
 
 class Status:
-    outdoor_temperature:int = None
+    outdoor_temperature: int = None
     mode: str = None
     temperature_unit: str = None
     filter_used: int = None
@@ -68,7 +65,9 @@ class Status:
         self.refresh()
 
     def refresh(self):
-        self.raw_status_json = self.system.api_connection.get_status(system_serial=self.system.serial)
+        self.raw_status_json = self.system.api_connection.get_status(
+            system_serial=self.system.serial
+        )
         self.outdoor_temperature = int(self.raw_status_json["oat"])
         self.mode = self.raw_status_json["mode"]
         self.temperature_unit = TemperatureUnits(self.raw_status_json["cfgem"])
@@ -82,9 +81,9 @@ class Status:
     @property
     def mode_const(self) -> str:
         match self.mode:
-            case 'gasheat' | 'electric' | 'hpheat':
+            case "gasheat" | "electric" | "hpheat":
                 return SystemModes.HEAT
-            case 'dehumidify':
+            case "dehumidify":
                 return SystemModes.COOL
 
     def __repr__(self):
@@ -94,9 +93,10 @@ class Status:
             "temperature_unit": self.temperature_unit,
             "filter_used": self.filter_used,
             "is_disconnected": self.is_disconnected,
-            "zones": ",".join(map(str, self.zones)),
+            "zones": map(lambda zone: zone.__repr__(), self.zones),
         }
 
     def __str__(self):
-        return f"{self.__repr__()}"
-
+        builder = self.__repr__()
+        builder["zones"] = ", ".join(map(lambda zone: zone.__str__(), self.zones))
+        return str(builder)

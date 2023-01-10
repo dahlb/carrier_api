@@ -26,10 +26,14 @@ class System:
         return {
             "serial": self.serial,
             "name": self.name,
-            "profile": str(self.profile),
-            "status": str(self.status),
-            "config": str(self.config),
+            "profile": self.profile.__repr__(),
+            "status": self.status.__repr__(),
+            "config": self.config.__repr__(),
         }
 
     def __str__(self):
-        return f"{self.__repr__()}"
+        builder = self.__repr__()
+        builder["profile"] = self.profile.__str__()
+        builder["status"] = self.status.__str__()
+        builder["config"] = self.config.__str__()
+        return f"{str(builder)}"
