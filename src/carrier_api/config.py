@@ -34,6 +34,7 @@ class ConfigZone:
         self.api_id = zone_json["$"]["id"]
         self.name: str = zone_json["name"]
         raw_hold_activity_name = zone_json.get("holdActivity", None)
+        self.hold_activity: ActivityNames = None
         if raw_hold_activity_name is not None:
             self.hold_activity: ActivityNames = ActivityNames(raw_hold_activity_name)
         self.hold: bool = zone_json["hold"] == "on"
@@ -48,7 +49,7 @@ class ConfigZone:
 
     def find_activity(self, activity_name: ActivityNames):
         for activity in self.activities:
-            if activity.api_id == activity_name.value:
+            if activity.api_id == activity_name:
                 return activity
 
     def current_activity(self) -> ConfigZoneActivity:
@@ -62,7 +63,7 @@ class ConfigZone:
                 active_schedule_periods(today_schedule_json["period"])
             )
             for active_period in active_periods:
-                hours, minutes = active_period["time"]
+                hours, minutes = active_period["time"].split(":")
                 if (int(hours) < now.hour) or (
                     int(hours) == now.hour and int(minutes) < now.minute
                 ):
