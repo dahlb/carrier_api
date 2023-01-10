@@ -19,7 +19,7 @@ class ConfigZoneActivity:
 
     def __repr__(self):
         return {
-            "api_id": self.api_id,
+            "api_id": self.api_id.value,
             "fan": self.fan.value,
             "heat_set_point": self.heat_set_point,
             "cool_set_point": self.cool_set_point,
