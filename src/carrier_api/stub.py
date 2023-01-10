@@ -39,7 +39,9 @@ async def testing():
     connection = ApiConnection(username=username, password=password)
     system = connection.get_systems()[0]
     logger.debug(system)
-    connection.resume_schedule(system_serial=system.serial, zone_id=system.config.zones[0].api_id)
+    connection.resume_schedule(
+        system_serial=system.serial, zone_id=system.config.zones[0].api_id
+    )
     # zone: ConfigZone = config.zones[0]
     # hold_until = zone.next_activity_time()
     # connection.set_config_mode(system_serial, SystemModes.HEAT.value)

@@ -12,7 +12,7 @@ def active_schedule_periods(periods_json: [dict]):
 
 class ConfigZoneActivity:
     def __init__(self, zone_activity_json: dict):
-        self.api_id: str = zone_activity_json["$"]["id"]
+        self.api_id: ActivityNames = ActivityNames(zone_activity_json["$"]["id"])
         self.fan: FanModes = FanModes(zone_activity_json["fan"])
         self.heat_set_point: float = float(zone_activity_json["htsp"])
         self.cool_set_point: float = float(zone_activity_json["clsp"])
@@ -33,7 +33,9 @@ class ConfigZone:
     def __init__(self, zone_json: dict, vacation_json: dict):
         self.api_id = zone_json["$"]["id"]
         self.name: str = zone_json["name"]
-        self.hold_activity: str = zone_json.get("holdActivity", None)
+        raw_hold_activity_name = zone_json.get("holdActivity", None)
+        if raw_hold_activity_name is not None:
+            self.hold_activity: ActivityNames = ActivityNames(raw_hold_activity_name)
         self.hold: bool = zone_json["hold"] == "on"
         self.hold_until: str = zone_json.get("otmr", None)
         self.program_json: dict = zone_json["program"]
@@ -64,12 +66,12 @@ class ConfigZone:
                 if (int(hours) < now.hour) or (
                     int(hours) == now.hour and int(minutes) < now.minute
                 ):
-                    return self.find_activity(active_period["activity"])
+                    return self.find_activity(ActivityNames(active_period["activity"]))
             yesterday_schedule = self.program_json["day"][sunday_0_index_today + 8 % 7]
             yesterday_active_periods = reversed(
                 active_schedule_periods(yesterday_schedule["period"])
             )
-            return self.find_activity(yesterday_active_periods[-1]["activity"])
+            return self.find_activity(ActivityNames(yesterday_active_periods[-1]["activity"]))
 
     def next_activity_time(self) -> str:
         now = datetime.now()

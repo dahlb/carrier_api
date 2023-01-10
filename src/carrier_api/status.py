@@ -1,6 +1,6 @@
 import logging
 
-from .const import SystemModes, TemperatureUnits, FanModes
+from .const import SystemModes, TemperatureUnits, FanModes, ActivityNames
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -9,7 +9,7 @@ class StatusZone:
     def __init__(self, status_zone_json: dict):
         self.api_id = status_zone_json["$"]["id"]
         self.name: str = status_zone_json["name"]
-        self.current_activity: str = status_zone_json["currentActivity"]
+        self.current_activity: ActivityNames = ActivityNames(status_zone_json["currentActivity"])
         self.temperature: float = status_zone_json["rt"]
         self.humidity: int = status_zone_json["rh"]
         self.fan: FanModes = FanModes(status_zone_json["fan"])
@@ -33,7 +33,7 @@ class StatusZone:
         return {
             "id": self.api_id,
             "name": self.name,
-            "current_activity": self.current_activity,
+            "current_activity": self.current_activity.value,
             "temperature": self.temperature,
             "humidity": self.humidity,
             "fan": self.fan.value,
