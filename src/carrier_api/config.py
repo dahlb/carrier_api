@@ -12,17 +12,17 @@ def active_schedule_periods(periods_json: [dict]):
 
 class ConfigZoneActivity:
     def __init__(self, zone_activity_json: dict):
-        self.api_id = zone_activity_json["$"]["id"]
+        self.api_id: str = zone_activity_json["$"]["id"]
         self.fan: FanModes = FanModes(zone_activity_json["fan"])
-        self.heat_set_point = zone_activity_json["htsp"]
-        self.cool_set_point = zone_activity_json["clsp"]
+        self.heat_set_point: float = float(zone_activity_json["htsp"])
+        self.cool_set_point: float = float(zone_activity_json["clsp"])
 
     def __repr__(self):
         return {
             "api_id": self.api_id,
-            "fan": FanModes(self.fan.value),
-            "heat_set_point": float(self.heat_set_point),
-            "cool_set_point": float(self.cool_set_point),
+            "fan": self.fan.value,
+            "heat_set_point": self.heat_set_point,
+            "cool_set_point": self.cool_set_point,
         }
 
     def __str__(self):
@@ -32,11 +32,11 @@ class ConfigZoneActivity:
 class ConfigZone:
     def __init__(self, zone_json: dict, vacation_json: dict):
         self.api_id = zone_json["$"]["id"]
-        self.name = zone_json["name"]
-        self.hold_activity = zone_json.get("holdActivity", None)
-        self.hold = zone_json["hold"] == "on"
-        self.hold_until = zone_json.get("otmr", None)
-        self.program_json = zone_json["program"]
+        self.name: str = zone_json["name"]
+        self.hold_activity: str = zone_json.get("holdActivity", None)
+        self.hold: bool = zone_json["hold"] == "on"
+        self.hold_until: str = zone_json.get("otmr", None)
+        self.program_json: dict = zone_json["program"]
         self.activities = []
         for zone_activity_json in zone_json["activities"]["activity"]:
             self.activities.append(

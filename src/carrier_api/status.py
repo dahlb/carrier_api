@@ -1,6 +1,6 @@
 import logging
 
-from .const import SystemModes, TemperatureUnits
+from .const import SystemModes, TemperatureUnits, FanModes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -8,16 +8,16 @@ _LOGGER = logging.getLogger(__name__)
 class StatusZone:
     def __init__(self, status_zone_json: dict):
         self.api_id = status_zone_json["$"]["id"]
-        self.name = status_zone_json["name"]
-        self.current_activity = status_zone_json["currentActivity"]
-        self.temperature = status_zone_json["rt"]
-        self.humidity = status_zone_json["rh"]
-        self.fan = status_zone_json["fan"]
-        self.hold = status_zone_json["hold"] == "on"
-        self.hold_until = status_zone_json.get("otmr", None)
-        self.heat_set_point = status_zone_json["htsp"]
-        self.cool_set_point = status_zone_json["clsp"]
-        self.conditioning = status_zone_json["zoneconditioning"]
+        self.name: str = status_zone_json["name"]
+        self.current_activity: str = status_zone_json["currentActivity"]
+        self.temperature: float = status_zone_json["rt"]
+        self.humidity: int = status_zone_json["rh"]
+        self.fan: FanModes = FanModes(status_zone_json["fan"])
+        self.hold: bool = status_zone_json["hold"] == "on"
+        self.hold_until: str = status_zone_json.get("otmr", None)
+        self.heat_set_point: float = float(status_zone_json["htsp"])
+        self.cool_set_point: float = float(status_zone_json["clsp"])
+        self.conditioning: str = status_zone_json["zoneconditioning"]
 
     @property
     def zone_conditioning_const(self) -> str:
@@ -36,7 +36,7 @@ class StatusZone:
             "current_activity": self.current_activity,
             "temperature": self.temperature,
             "humidity": self.humidity,
-            "fan": self.fan,
+            "fan": self.fan.value,
             "hold": self.hold,
             "hold_until": self.hold_until,
             "heat_set_point": self.heat_set_point,
