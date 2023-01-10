@@ -90,7 +90,7 @@ class ConfigZone:
 
     def __repr__(self):
         builder = {
-            "api_id": self.api_id.value,
+            "api_id": self.api_id,
             "name": self.name,
             "hold_activity": self.hold_activity,
             "hold": self.hold,
