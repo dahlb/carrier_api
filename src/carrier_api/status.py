@@ -45,7 +45,7 @@ class StatusZone:
         }
 
     def __str__(self):
-        return f"{self.__repr__()}"
+        return str(self.__repr__())
 
 
 class Status:
@@ -97,6 +97,4 @@ class Status:
         }
 
     def __str__(self):
-        builder = self.__repr__()
-        builder["zones"] = ", ".join(map(lambda zone: zone.__str__(), self.zones))
-        return str(builder)
+        return str(self.__repr__())

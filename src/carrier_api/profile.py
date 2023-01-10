@@ -45,4 +45,4 @@ class Profile:
         }
 
     def __str__(self):
-        return f"{self.__repr__()}"
+        return str(self.__repr__())

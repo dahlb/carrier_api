@@ -26,7 +26,7 @@ class ConfigZoneActivity:
         }
 
     def __str__(self):
-        return f"{self.__repr__()}"
+        return str(self.__repr__())
 
 
 class ConfigZone:
@@ -102,11 +102,7 @@ class ConfigZone:
         return builder
 
     def __str__(self):
-        builder = self.__repr__()
-        builder["activities"] = ", ".join(
-            map(lambda activity: activity.__str__(), self.activities)
-        )
-        return str(builder)
+        return str(self.__repr__())
 
 
 class Config:
@@ -158,6 +154,4 @@ class Config:
         }
 
     def __str__(self):
-        builder = self.__repr__()
-        builder["zones"] = ", ".join(map(lambda zone: zone.__str__(), self.zones))
-        return str(builder)
+        return str(self.__repr__())

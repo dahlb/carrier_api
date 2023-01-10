@@ -32,8 +32,4 @@ class System:
         }
 
     def __str__(self):
-        builder = self.__repr__()
-        builder["profile"] = self.profile.__str__()
-        builder["status"] = self.status.__str__()
-        builder["config"] = self.config.__str__()
-        return f"{str(builder)}"
+        return str(self.__repr__())
