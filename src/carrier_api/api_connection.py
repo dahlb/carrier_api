@@ -142,6 +142,23 @@ class ApiConnection:
         }
         self.update_config(system_serial=system_serial, data=data)
 
+    def resume_schedule(self, system_serial: str, zone_id: str):
+        data = {
+            "config": {
+                "zones": {
+                    "zone": [
+                        {
+                            "@id": zone_id,
+                            "hold": "off",
+                            "holdActivity": None,
+                            "otmr": None,
+                        }
+                    ]
+                }
+            }
+        }
+        self.update_config(system_serial=system_serial, data=data)
+
     def set_config_manual_activity(
         self,
         system_serial: str,
@@ -162,8 +179,8 @@ class ApiConnection:
                                 "activity": [
                                     {
                                         "@id": "manual",
-                                        "htsp": heat_set_point,
-                                        "clsp": cool_set_point,
+                                        "htsp": float(heat_set_point),
+                                        "clsp": float(cool_set_point),
                                         "fan": fan_mode.value,
                                     }
                                 ]

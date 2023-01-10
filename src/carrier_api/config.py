@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 
-from .const import FanModes
+from .const import FanModes, ActivityNames
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,9 +20,9 @@ class ConfigZoneActivity:
     def __repr__(self):
         return {
             "api_id": self.api_id,
-            "fan": self.fan.value,
-            "heat_set_point": self.heat_set_point,
-            "cool_set_point": self.cool_set_point,
+            "fan": FanModes(self.fan.value),
+            "heat_set_point": float(self.heat_set_point),
+            "cool_set_point": float(self.cool_set_point),
         }
 
     def __str__(self):
@@ -44,9 +44,9 @@ class ConfigZone:
             )
         self.activities.append(ConfigZoneActivity(zone_activity_json=vacation_json))
 
-    def find_activity(self, name: str):
+    def find_activity(self, activity_name: ActivityNames):
         for activity in self.activities:
-            if activity.api_id == name:
+            if activity.api_id == activity_name.value:
                 return activity
 
     def current_activity(self) -> ConfigZoneActivity:
