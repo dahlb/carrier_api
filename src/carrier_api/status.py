@@ -13,7 +13,7 @@ class StatusZone:
         self.current_activity: ActivityNames = ActivityNames(status_zone_json["currentActivity"])
         self.temperature: float = safely_get_json_value(status_zone_json, "rt", float)
         self.humidity: int = safely_get_json_value(status_zone_json, "rh", int)
-        self.occupancy: bool = safely_get_json_value(status_zone_json, "occupancy", bool)
+        self.occupancy: bool = safely_get_json_value(status_zone_json, "occupancy") == "occupied"
         self.fan: FanModes = FanModes(status_zone_json["fan"])
         self.hold: bool = safely_get_json_value(status_zone_json, "hold") == "on"
         self.hold_until: str = safely_get_json_value(status_zone_json, "otmr")
