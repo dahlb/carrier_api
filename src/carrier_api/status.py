@@ -1,23 +1,25 @@
 import logging
 
 from .const import SystemModes, TemperatureUnits, FanModes, ActivityNames
+from .util import safely_get_json_value
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class StatusZone:
     def __init__(self, status_zone_json: dict):
-        self.api_id = status_zone_json["$"]["id"]
-        self.name: str = status_zone_json["name"]
+        self.api_id = safely_get_json_value(status_zone_json, "$.id")
+        self.name: str = safely_get_json_value(status_zone_json, "name")
         self.current_activity: ActivityNames = ActivityNames(status_zone_json["currentActivity"])
-        self.temperature: float = status_zone_json["rt"]
-        self.humidity: int = status_zone_json["rh"]
+        self.temperature: float = safely_get_json_value(status_zone_json, "rt", float)
+        self.humidity: int = safely_get_json_value(status_zone_json, "rh", int)
+        self.occupancy: bool = safely_get_json_value(status_zone_json, "occupancy", bool)
         self.fan: FanModes = FanModes(status_zone_json["fan"])
-        self.hold: bool = status_zone_json["hold"] == "on"
-        self.hold_until: str = status_zone_json.get("otmr", None)
-        self.heat_set_point: float = float(status_zone_json["htsp"])
-        self.cool_set_point: float = float(status_zone_json["clsp"])
-        self.conditioning: str = status_zone_json["zoneconditioning"]
+        self.hold: bool = safely_get_json_value(status_zone_json, "hold") == "on"
+        self.hold_until: str = safely_get_json_value(status_zone_json, "otmr")
+        self.heat_set_point: float = safely_get_json_value(status_zone_json, "htsp", float)
+        self.cool_set_point: float = safely_get_json_value(status_zone_json, "clsp", float)
+        self.conditioning: str = safely_get_json_value(status_zone_json, "zoneconditioning")
 
     @property
     def zone_conditioning_const(self) -> str:
@@ -38,6 +40,7 @@ class StatusZone:
             "humidity": self.humidity,
             "fan": self.fan.value,
             "hold": self.hold,
+            "occupancy": self.occupancy,
             "hold_until": self.hold_until,
             "heat_set_point": self.heat_set_point,
             "cool_set_point": self.cool_set_point,
@@ -54,6 +57,7 @@ class Status:
     temperature_unit: str = None
     filter_used: int = None
     is_disconnected: bool = None
+    airflow_cfm: int = None
     zones: [StatusZone] = None
     raw_status_json: dict = None
 
@@ -68,14 +72,15 @@ class Status:
         self.raw_status_json = self.system.api_connection.get_status(
             system_serial=self.system.serial
         )
-        self.outdoor_temperature: float = float(self.raw_status_json["oat"])
+        self.outdoor_temperature: float = safely_get_json_value(self.raw_status_json, "oat", float)
         self.mode: str = self.raw_status_json["mode"]
         self.temperature_unit: TemperatureUnits = TemperatureUnits(self.raw_status_json["cfgem"])
-        self.filter_used: int = self.raw_status_json["filtrlvl"]
-        self.is_disconnected: bool = self.raw_status_json["isDisconnected"]
+        self.filter_used: int = safely_get_json_value(self.raw_status_json, "filtrlvl", int)
+        self.is_disconnected: bool = safely_get_json_value(self.raw_status_json, "isDisconnected", bool)
+        self.airflow_cfm: int = safely_get_json_value(self.raw_status_json, "idu.cfm", int)
         self.zones = []
         for zone_json in self.raw_status_json["zones"]["zone"]:
-            if zone_json["enabled"] == "on":
+            if safely_get_json_value(zone_json, "enabled") == "on":
                 self.zones.append(StatusZone(zone_json))
 
     @property
@@ -93,6 +98,7 @@ class Status:
             "temperature_unit": self.temperature_unit.value,
             "filter_used": self.filter_used,
             "is_disconnected": self.is_disconnected,
+            "airflow_cfm": self.airflow_cfm,
             "zones": list(map(lambda zone: zone.__repr__(), self.zones)),
         }
 

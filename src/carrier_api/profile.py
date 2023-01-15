@@ -1,3 +1,10 @@
+import logging
+
+from .util import safely_get_json_value
+
+_LOGGER = logging.getLogger(__name__)
+
+
 class Profile:
     model: str = None
     brand: str = None
@@ -20,17 +27,17 @@ class Profile:
         self.raw_profile_json = self.system.api_connection.get_profile(
             system_serial=self.system.serial
         )
-        self.model = self.raw_profile_json["model"]
-        self.brand = self.raw_profile_json["brand"]
-        self.firmware = self.raw_profile_json["firmware"]
-        self.indoor_model = self.raw_profile_json["indoorModel"]
-        self.indoor_serial = self.raw_profile_json["indoorSerial"]
-        self.outdoor_model = self.raw_profile_json["outdoorModel"]
+        self.model = safely_get_json_value(self.raw_profile_json, "model")
+        self.brand = safely_get_json_value(self.raw_profile_json, "brand")
+        self.firmware = safely_get_json_value(self.raw_profile_json, "firmware")
+        self.indoor_model = safely_get_json_value(self.raw_profile_json, "indoorModel")
+        self.indoor_serial = safely_get_json_value(self.raw_profile_json, "indoorSerial")
+        self.outdoor_model = safely_get_json_value(self.raw_profile_json, "outdoorModel")
         self.outdoor_serial = self.raw_profile_json["outdoorSerial"]
         self.zone_ids = []
-        for zone in self.raw_profile_json["zones"]["zone"]:
-            if zone["present"] == "on":
-                self.zone_ids.append(zone["$"]["id"])
+        for zone in safely_get_json_value(self.raw_profile_json, "zones.zone"):
+            if safely_get_json_value(zone, "present") == "on":
+                self.zone_ids.append(safely_get_json_value(zone, "$.id"))
 
     def __repr__(self):
         return {

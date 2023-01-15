@@ -1,10 +1,5 @@
 from enum import Enum
 
-SENSITIVE_FIELD_NAMES = [
-    "username",
-    "password",
-]
-
 INFINITY_API_BASE_URL = "https://www.app-api.ing.carrier.com"
 INFINITY_API_CONSUMER_KEY = "8j30j19aj103911h"
 INFINITY_API_CONSUMER_SECRET = "0f5ur7d89sjv8d45"
