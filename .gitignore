@@ -6,3 +6,4 @@ venv/
 dist/
 src/carrier_api.egg-info/
 build/
+src/carrier_api/stub.py
