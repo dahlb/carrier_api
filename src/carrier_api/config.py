@@ -67,9 +67,9 @@ class ConfigZone:
                 ):
                     return self.find_activity(safely_get_json_value(active_period, "activity", ActivityNames))
             yesterday_schedule = self.program_json["day"][(sunday_0_index_today + 8) % 7]
-            yesterday_active_periods = reversed(
+            yesterday_active_periods = list(reversed(
                 active_schedule_periods(yesterday_schedule["period"])
-            )
+            ))
             return self.find_activity(safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityNames))
 
     def next_activity_time(self) -> str:
