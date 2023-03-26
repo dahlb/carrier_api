@@ -19,7 +19,7 @@ setup(
     long_description_content_type="text/markdown",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    install_requires=["xmltodict", "requests-oauthlib", "requests"],
+    install_requires=["xmltodict", "requests-oauthlib", "requests", "python-dateutil"],
     keywords=["carrier", "api"],
     classifiers=[
         "Development Status :: 4 - Beta",

@@ -1,5 +1,9 @@
 import logging
 
+from dateutil.parser import isoparse
+import datetime
+from dateutil import tz
+
 from .util import safely_get_json_value
 
 _LOGGER = logging.getLogger(__name__)
@@ -13,6 +17,7 @@ class Profile:
     indoor_serial: str = None
     outdoor_model: str = None
     outdoor_serial: str = None
+    time_stamp: datetime = None
     zone_ids: [str] = None
     raw_profile_json: dict = None
 
@@ -34,6 +39,7 @@ class Profile:
         self.indoor_serial = safely_get_json_value(self.raw_profile_json, "indoorSerial")
         self.outdoor_model = safely_get_json_value(self.raw_profile_json, "outdoorModel")
         self.outdoor_serial = self.raw_profile_json["outdoorSerial"]
+        self.time_stamp = isoparse(safely_get_json_value(self.raw_profile_json, "timestamp"))
         self.zone_ids = []
         for zone in safely_get_json_value(self.raw_profile_json, "zones.zone"):
             if safely_get_json_value(zone, "present") == "on":
@@ -48,6 +54,7 @@ class Profile:
             "indoor_serial": self.indoor_serial,
             "outdoor_model": self.outdoor_model,
             "outdoor_serial": self.outdoor_serial,
+            "time_stamp": self.time_stamp.astimezone().strftime("%m/%d/%Y, %H:%M:%S %Z"),
             "zone_ids": self.zone_ids,
         }
 

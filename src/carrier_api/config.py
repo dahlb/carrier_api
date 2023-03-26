@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from dateutil.parser import isoparse
 
 from .const import FanModes, ActivityNames
 from .util import safely_get_json_value
@@ -109,6 +110,7 @@ class Config:
     mode: str = None
     limit_min: int = None
     limit_max: int = None
+    time_stamp: datetime = None
     zones: [ConfigZone] = None
     raw_config_json: dict = None
 
@@ -128,6 +130,7 @@ class Config:
         self.mode = safely_get_json_value(self.raw_config_json, "mode")
         self.limit_min = safely_get_json_value(self.raw_config_json, "utilityEvent.minLimit", int)
         self.limit_max = safely_get_json_value(self.raw_config_json, "utilityEvent.maxLimit", int)
+        self.time_stamp = isoparse(safely_get_json_value(self.raw_config_json, "timestamp"))
         vacation_json = {
             "$": {"id": "vacation"},
             "clsp": self.raw_config_json["vacmaxt"],
@@ -148,6 +151,7 @@ class Config:
             "mode": self.mode,
             "limit_min": self.limit_min,
             "limit_max": self.limit_max,
+            "time_stamp": self.time_stamp.astimezone().strftime("%m/%d/%Y, %H:%M:%S %Z"),
             "zones": list(map(lambda zone: zone.__repr__(), self.zones)),
         }
 

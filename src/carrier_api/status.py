@@ -1,5 +1,8 @@
 import logging
 
+from dateutil.parser import isoparse
+import datetime
+
 from .const import SystemModes, TemperatureUnits, FanModes, ActivityNames
 from .util import safely_get_json_value
 
@@ -58,6 +61,7 @@ class Status:
     filter_used: int = None
     is_disconnected: bool = None
     airflow_cfm: int = None
+    time_stamp: datetime = None
     zones: [StatusZone] = None
     raw_status_json: dict = None
 
@@ -78,6 +82,7 @@ class Status:
         self.filter_used: int = safely_get_json_value(self.raw_status_json, "filtrlvl", int)
         self.is_disconnected: bool = safely_get_json_value(self.raw_status_json, "isDisconnected", bool)
         self.airflow_cfm: int = safely_get_json_value(self.raw_status_json, "idu.cfm", int)
+        self.time_stamp = isoparse(safely_get_json_value(self.raw_status_json, "timestamp"))
         self.zones = []
         for zone_json in self.raw_status_json["zones"]["zone"]:
             if safely_get_json_value(zone_json, "enabled") == "on":
@@ -99,6 +104,7 @@ class Status:
             "filter_used": self.filter_used,
             "is_disconnected": self.is_disconnected,
             "airflow_cfm": self.airflow_cfm,
+            "time_stamp": self.time_stamp.astimezone().strftime("%m/%d/%Y, %H:%M:%S %Z"),
             "zones": list(map(lambda zone: zone.__repr__(), self.zones)),
         }
 
