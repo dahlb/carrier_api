@@ -46,9 +46,11 @@ class ApiConnection:
         response.raise_for_status()
         return response.json()
 
-    def _post(self, url: str, data: dict) -> Response:
-        xml = xmltodict.unparse(data)
-        data_xml = f"""data={quote(xml, safe="!~*'()")}"""
+    def _post(self, url: str, data: dict=None) -> Response:
+        data_xml = None
+        if data is not None:
+            xml = xmltodict.unparse(data)
+            data_xml = f"""data={quote(xml, safe="!~*'()")}"""
         if "users/authenticated" in url:
             resource_owner_secret = None
         else:
@@ -82,6 +84,11 @@ class ApiConnection:
                 raise AuthError(response_json["error"]["message"])
             self.access_token = response.json()["result"]["accessToken"]
         return self.access_token
+
+    def activate(self):
+        """request data refresh from api"""
+        url = f"{INFINITY_API_BASE_URL}/users/{self.username}/activateSystems"
+        self._post(url)
 
     def get_systems(self) -> [System]:
         url = f"{INFINITY_API_BASE_URL}/users/{self.username}/locations"

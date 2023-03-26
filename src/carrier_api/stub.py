@@ -37,6 +37,7 @@ async def testing():
     username = input("username: ")
     password = getpass()
     connection = ApiConnection(username=username, password=password)
+    connection.activate()
     system = connection.get_systems()[0]
     zone: ConfigZone = system.config.zones[0]
     logger.debug(system)
