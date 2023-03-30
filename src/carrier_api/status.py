@@ -62,6 +62,7 @@ class Status:
     is_disconnected: bool = None
     airflow_cfm: int = None
     outdoor_unit_operational_status: str = None
+    indoor_unit_operational_status: str = None
     time_stamp: datetime = None
     zones: [StatusZone] = None
     raw_status_json: dict = None
@@ -84,6 +85,7 @@ class Status:
         self.is_disconnected: bool = safely_get_json_value(self.raw_status_json, "isDisconnected", bool)
         self.airflow_cfm: int = safely_get_json_value(self.raw_status_json, "idu.cfm", int)
         self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "odu.opstat")
+        self.indoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "idu.opstat")
         self.time_stamp = isoparse(safely_get_json_value(self.raw_status_json, "timestamp"))
         self.zones = []
         for zone_json in self.raw_status_json["zones"]["zone"]:
@@ -106,6 +108,8 @@ class Status:
             "filter_used": self.filter_used,
             "is_disconnected": self.is_disconnected,
             "airflow_cfm": self.airflow_cfm,
+            "outdoor_unit_operational_status": self.outdoor_unit_operational_status,
+            "indoor_unit_operational_status": self.indoor_unit_operational_status,
             "time_stamp": self.time_stamp.astimezone().strftime("%m/%d/%Y, %H:%M:%S %Z"),
             "zones": list(map(lambda zone: zone.__repr__(), self.zones)),
         }
