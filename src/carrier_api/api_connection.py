@@ -86,7 +86,7 @@ class ApiConnection:
         return self.access_token
 
     def activate(self):
-        """request data refresh from api"""
+        """request data refresh from api."""
         url = f"{INFINITY_API_BASE_URL}/users/{self.username}/activateSystems"
         self._post(url)
 

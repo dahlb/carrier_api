@@ -2,7 +2,6 @@ import logging
 
 from dateutil.parser import isoparse
 import datetime
-from dateutil import tz
 
 from .util import safely_get_json_value
 

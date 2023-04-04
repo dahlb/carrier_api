@@ -94,7 +94,7 @@ class ConfigZone:
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,
-            "activities": list(map(lambda activity: activity.__repr__(), self.activities)),
+            "activities": [activity.__repr__() for activity in self.activities],
         }
         if self.hold_activity is not None:
             builder["hold_activity"] = self.hold_activity.value
@@ -152,7 +152,7 @@ class Config:
             "limit_min": self.limit_min,
             "limit_max": self.limit_max,
             "time_stamp": self.time_stamp.astimezone().strftime("%m/%d/%Y, %H:%M:%S %Z"),
-            "zones": list(map(lambda zone: zone.__repr__(), self.zones)),
+            "zones": [zone.__repr__() for zone in self.zones],
         }
 
     def __str__(self):

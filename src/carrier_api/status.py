@@ -111,7 +111,7 @@ class Status:
             "outdoor_unit_operational_status": self.outdoor_unit_operational_status,
             "indoor_unit_operational_status": self.indoor_unit_operational_status,
             "time_stamp": self.time_stamp.astimezone().strftime("%m/%d/%Y, %H:%M:%S %Z"),
-            "zones": list(map(lambda zone: zone.__repr__(), self.zones)),
+            "zones": [zone.__repr__() for zone in self.zones],
         }
 
     def __str__(self):
