@@ -78,6 +78,7 @@ class Status:
         self.raw_status_json = self.system.api_connection.get_status(
             system_serial=self.system.serial
         )
+        _LOGGER.debug(f"raw_status_json:{self.raw_status_json}")
         self.outdoor_temperature: float = safely_get_json_value(self.raw_status_json, "oat", float)
         self.mode: str = self.raw_status_json["mode"]
         self.temperature_unit: TemperatureUnits = TemperatureUnits(self.raw_status_json["cfgem"])

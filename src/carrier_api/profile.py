@@ -31,6 +31,7 @@ class Profile:
         self.raw_profile_json = self.system.api_connection.get_profile(
             system_serial=self.system.serial
         )
+        _LOGGER.debug(f"raw_profile_json:{self.raw_profile_json}")
         self.model = safely_get_json_value(self.raw_profile_json, "model")
         self.brand = safely_get_json_value(self.raw_profile_json, "brand")
         self.firmware = safely_get_json_value(self.raw_profile_json, "firmware")

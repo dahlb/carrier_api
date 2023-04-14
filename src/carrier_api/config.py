@@ -125,6 +125,7 @@ class Config:
         self.raw_config_json = self.system.api_connection.get_config(
             system_serial=self.system.serial
         )
+        _LOGGER.debug(f"raw_config_json:{self.raw_config_json}")
         self.temperature_unit = safely_get_json_value(self.raw_config_json, "cfgem")
         self.static_pressure = safely_get_json_value(self.raw_config_json, "staticPressure")
         self.mode = safely_get_json_value(self.raw_config_json, "mode")
