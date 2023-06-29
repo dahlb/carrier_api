@@ -1,4 +1,4 @@
-setuptools>=42
+setuptools>=61.0
 wheel
 colorlog==6.7.0
 pip>=8.0.3,<23.1

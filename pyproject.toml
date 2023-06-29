@@ -1,6 +1,38 @@
 [build-system]
 requires = [
-    "setuptools>=42",
+    "setuptools>=61.0",
     "wheel"
 ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "carrier_api"
+version = "1.10.1"
+authors = [
+  { name="Brendan Dahl", email="dahl.brendan@gmail.com" },
+]
+description = "Carrier Api Wrapper"
+readme = "README.md"
+requires-python = ">=3.10, <4"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Operating System :: MacOS :: MacOS X",
+]
+keywords = [
+    "carrier",
+    "api"
+]
+dependencies = [
+    "xmltodict",
+    "requests-oauthlib",
+    "requests",
+    "python-dateutil"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/dahlb/carrier_api"
+"Bug Tracker" = "https://github.com/dahlb/carrier_api/issues"
