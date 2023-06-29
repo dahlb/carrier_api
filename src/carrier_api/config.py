@@ -51,33 +51,37 @@ class ConfigZone:
             if activity.api_id == activity_name:
                 return activity
 
+    def yesterday_active_periods(self):
+        now = datetime.now()
+        sunday_0_index_today = int(now.date().strftime("%w"))
+        yesterday_schedule = self.program_json["day"][(sunday_0_index_today + 8) % 7]
+        return active_schedule_periods(yesterday_schedule["period"])
+
+    def today_active_periods(self):
+        now = datetime.now()
+        sunday_0_index_today = int(now.date().strftime("%w"))
+        today_schedule_json = self.program_json["day"][sunday_0_index_today]
+        return active_schedule_periods(today_schedule_json["period"])
+
     def current_activity(self) -> ConfigZoneActivity:
         if self.hold:
             return self.find_activity(self.hold_activity)
         else:
             now = datetime.now()
-            sunday_0_index_today = int(now.date().strftime("%w"))
-            today_schedule_json = self.program_json["day"][sunday_0_index_today]
-            active_periods = reversed(
-                active_schedule_periods(today_schedule_json["period"])
-            )
+            active_periods = reversed(self.today_active_periods())
             for active_period in active_periods:
                 hours, minutes = active_period["time"].split(":")
                 if (int(hours) < now.hour) or (
                     int(hours) == now.hour and int(minutes) < now.minute
                 ):
                     return self.find_activity(safely_get_json_value(active_period, "activity", ActivityNames))
-            yesterday_schedule = self.program_json["day"][(sunday_0_index_today + 8) % 7]
-            yesterday_active_periods = list(reversed(
-                active_schedule_periods(yesterday_schedule["period"])
-            ))
+            yesterday_active_periods = list(reversed(self.yesterday_active_periods()))
             return self.find_activity(safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityNames))
 
     def next_activity_time(self) -> str:
         now = datetime.now()
         sunday_0_index_today = int(now.date().strftime("%w"))
-        today_schedule_json = self.program_json["day"][sunday_0_index_today]
-        active_periods = active_schedule_periods(today_schedule_json["period"])
+        active_periods = self.today_active_periods()
         for active_period in active_periods:
             hours, minutes = active_period["time"].split(":")
             if (int(hours) > now.hour) or (
@@ -88,12 +92,17 @@ class ConfigZone:
         return active_schedule_periods(tomorrow_schedule["period"])[0]["time"]
 
     def __repr__(self):
+        now = datetime.now()
         builder = {
             "api_id": self.api_id,
             "name": self.name,
+            "now": f"{now.hour}:{now.minute}",
+            "current_activity": self.current_activity().__repr__(),
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,
+            "today_active_periods": [period.__repr__() for period in self.today_active_periods()],
+            "yesterday_active_periods": [period.__repr__() for period in self.yesterday_active_periods()],
             "activities": [activity.__repr__() for activity in self.activities],
         }
         if self.hold_activity is not None:
