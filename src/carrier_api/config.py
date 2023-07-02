@@ -68,14 +68,14 @@ class ConfigZone:
             return self.find_activity(self.hold_activity)
         else:
             now = datetime.now()
-            active_periods = reversed(self.today_active_periods())
-            for active_period in active_periods:
+            reversed_active_periods = reversed(self.today_active_periods())
+            for active_period in reversed_active_periods:
                 hours, minutes = active_period["time"].split(":")
                 if (int(hours) < now.hour) or (
                     int(hours) == now.hour and int(minutes) < now.minute
                 ):
                     return self.find_activity(safely_get_json_value(active_period, "activity", ActivityNames))
-            yesterday_active_periods = list(reversed(self.yesterday_active_periods()))
+            yesterday_active_periods = list(self.yesterday_active_periods())
             return self.find_activity(safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityNames))
 
     def next_activity_time(self) -> str:
