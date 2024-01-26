@@ -61,6 +61,8 @@ class Status:
     filter_used: int = None
     is_disconnected: bool = None
     airflow_cfm: int = None
+    humidity_level: int = None
+    humidifier_on: bool = None
     outdoor_unit_operational_status: str = None
     indoor_unit_operational_status: str = None
     time_stamp: datetime = None
@@ -83,6 +85,9 @@ class Status:
         self.mode: str = safely_get_json_value(self.raw_status_json, "mode")
         self.temperature_unit: TemperatureUnits = TemperatureUnits(self.raw_status_json["cfgem"])
         self.filter_used: int = safely_get_json_value(self.raw_status_json, "filtrlvl", int)
+        self.humidity_level: int = safely_get_json_value(self.raw_status_json, "humlvl", int)
+        if self.raw_status_json.get('humid') is not None:
+            self.humidifier_on: bool = safely_get_json_value(self.raw_status_json, "humid", str) == 'on'
         self.is_disconnected: bool = safely_get_json_value(self.raw_status_json, "isDisconnected", bool)
         self.airflow_cfm: int = safely_get_json_value(self.raw_status_json, "idu.cfm", int)
         self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "odu.opstat")
