@@ -68,6 +68,8 @@ class Status:
     time_stamp: datetime = None
     zones: [StatusZone] = None
     raw_status_json: dict = None
+    raw_idu_status_json: dict = None # add for idu status
+    raw__odu_status_json: dict = None # add for odu status
 
     def __init__(
         self,
@@ -91,17 +93,15 @@ class Status:
         _LOGGER.debug(f"raw_status_json:{self.raw_status_json}")
         self.outdoor_temperature: float = safely_get_json_value(self.raw_status_json, "oat", float)
         self.mode: str = safely_get_json_value(self.raw_status_json, "mode")
-        self.temperature_unit: TemperatureUnits = TemperatureUnits(self.raw_status_json["cfgem"])
-        self.filter_used: int = safely_get_json_value(self.raw_status_json, "filtrlvl", int)
-        self.humidity_level: int = safely_get_json_value(self.raw_status_json, "humlvl", int)
-        if self.raw_status_json.get('humid') is not None:
-            self.humidifier_on: bool = safely_get_json_value(self.raw_status_json, "humid", str) == 'on'
+        self.temperature_unit: TemperatureUnits = TemperatureUnits(self.raw_status_json["cfgem"])               # cfgem not found anymore in the API - definitely in the config api pull
+        self.filter_used: int = safely_get_json_value(self.raw_status_json, "levels.filter", int)               # updated to nested JSON key
+        self.humidity_level: int = safely_get_json_value(self.raw_status_json, "humlvl", int)                   # not used anymore?
+        if safely_get_json_value(self.raw_status_json, "components.humidifier", str) is not None:               # updated this check - prolly a cleaner way but went with this
+            self.humidifier_on: bool = safely_get_json_value(self.raw_status_json, "components.humidifier", str) == 'on'
         self.is_disconnected: bool = safely_get_json_value(self.raw_status_json, "isDisconnected", bool)
-        self.airflow_cfm: int = safely_get_json_value(self.raw_status_json, "idu.cfm", int)
-        #self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "odu.opstat")
-        self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw_odu_status_json, "opstat")
-        #self.indoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "idu.opstat")
-        self.indoor_unit_operational_status: str = safely_get_json_value(self.raw_idu_status_json, "opstat")
+        self.airflow_cfm: int = safely_get_json_value(self.raw_idu_status_json, "iducfm", int)                  #updated the key and source
+        self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw_odu_status_json, "opstat")   #updated the key and source
+        self.indoor_unit_operational_status: str = safely_get_json_value(self.raw_idu_status_json, "opstat")    #updated the key and source
         self.time_stamp = isoparse(safely_get_json_value(self.raw_status_json, "timestamp"))
         self.zones = []
         for zone_json in self.raw_status_json["zones"]["zone"]:
