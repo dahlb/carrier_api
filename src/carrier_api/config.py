@@ -135,8 +135,8 @@ class Config:
             system_serial=self.system.serial
         )
         _LOGGER.debug(f"raw_config_json:{self.raw_config_json}")
-        self.temperature_unit = safely_get_json_value(self.raw_config_json, "cfgem")
-        self.static_pressure = safely_get_json_value(self.raw_config_json, "staticPressure")
+        self.temperature_unit = safely_get_json_value(self.raw_config_json, "tempUnits")  #updated to new key
+        self.static_pressure = safely_get_json_value(self.raw_config_json, "airflow.staticPressure") #updated to nested key
         self.mode = safely_get_json_value(self.raw_config_json, "mode")
         self.limit_min = safely_get_json_value(self.raw_config_json, "utilityEvent.minLimit", int)
         self.limit_max = safely_get_json_value(self.raw_config_json, "utilityEvent.maxLimit", int)
