@@ -80,6 +80,14 @@ class Status:
         self.raw_status_json = self.system.api_connection.get_status(
             system_serial=self.system.serial
         )
+        #retrieve idu status
+        self.raw_idu_status_json = self.system.api_connection.get_idu_status(
+            system_serial=self.system.serial
+        )
+        #retrieve odu status
+        self.raw_odu_status_json = self.system.api_connection.get_odu_status(
+            system_serial=self.system.serial
+        )
         _LOGGER.debug(f"raw_status_json:{self.raw_status_json}")
         self.outdoor_temperature: float = safely_get_json_value(self.raw_status_json, "oat", float)
         self.mode: str = safely_get_json_value(self.raw_status_json, "mode")
@@ -90,8 +98,10 @@ class Status:
             self.humidifier_on: bool = safely_get_json_value(self.raw_status_json, "humid", str) == 'on'
         self.is_disconnected: bool = safely_get_json_value(self.raw_status_json, "isDisconnected", bool)
         self.airflow_cfm: int = safely_get_json_value(self.raw_status_json, "idu.cfm", int)
-        self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "odu.opstat")
-        self.indoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "idu.opstat")
+        #self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "odu.opstat")
+        self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw_odu_status_json, "opstat")
+        #self.indoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "idu.opstat")
+        self.indoor_unit_operational_status: str = safely_get_json_value(self.raw_idu_status_json, "opstat")
         self.time_stamp = isoparse(safely_get_json_value(self.raw_status_json, "timestamp"))
         self.zones = []
         for zone_json in self.raw_status_json["zones"]["zone"]:
