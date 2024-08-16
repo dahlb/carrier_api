@@ -113,6 +113,14 @@ class ApiConnection:
     def get_status(self, system_serial: str) -> dict:
         url = f"{INFINITY_API_BASE_URL}/systems/{system_serial}/status"
         return self._get(url)["status"]
+    
+    def get_idu_status(self, system_serial: str) -> dict: # Indoor Unit Status
+        url = f"{INFINITY_API_BASE_URL}/systems/{system_serial}/idu_status"
+        return self._get(url)["idu_status"]
+    
+    def get_odu_status(self, system_serial: str) -> dict: # Outdoor Unit Status
+        url = f"{INFINITY_API_BASE_URL}/systems/{system_serial}/status"
+        return self._get(url)["odu_status"]
 
     def get_config(self, system_serial: str) -> dict:
         url = f"{INFINITY_API_BASE_URL}/systems/{system_serial}/config"
