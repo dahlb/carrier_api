@@ -69,7 +69,7 @@ class Status:
     zones: [StatusZone] = None
     raw_status_json: dict = None
     raw_idu_status_json: dict = None # add for idu status
-    raw__odu_status_json: dict = None # add for odu status
+    raw_odu_status_json: dict = None # add for odu status
 
     def __init__(
         self,
