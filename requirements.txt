@@ -1,5 +1,8 @@
 setuptools>=61.0
 wheel
-colorlog==6.7.0
+xmltodict
+requests-oauthlib
+requests
+python-dateutil
 pip>=8.0.3,<23.1
 ruff==0.0.257
