@@ -46,7 +46,7 @@ class ApiConnection:
         response.raise_for_status()
         return response.json()
 
-    def _post(self, url: str, data: dict=None) -> Response:
+    def _post(self, url: str, data: dict = None) -> Response:
         data_xml = None
         if data is not None:
             xml = xmltodict.unparse(data)
@@ -173,6 +173,7 @@ class ApiConnection:
         heat_set_point: int,
         cool_set_point: int,
         fan_mode: FanModes,
+        hold_until: str = None
     ):
         data = {
             "config": {
@@ -182,6 +183,7 @@ class ApiConnection:
                             "@id": zone_id,
                             "hold": "on",
                             "holdActivity": ActivityNames.MANUAL.value,
+                            "otmr": hold_until,
                             "activities": {
                                 "activity": [
                                     {

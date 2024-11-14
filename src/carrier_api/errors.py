@@ -1,7 +1,7 @@
-from aiohttp import ClientError
+from requests import HTTPError
 
 
-class BaseError(ClientError):
+class BaseError(HTTPError):
     pass
 
 

@@ -33,22 +33,20 @@ from src.carrier_api.config import Config, ConfigZone, ConfigZoneActivity
 from src.carrier_api.const import SystemModes, ActivityNames, FanModes
 
 
-async def testing():
-    username = input("username: ")
-    password = getpass()
-    connection = ApiConnection(username=username, password=password)
-    connection.activate()
-    system = connection.get_systems()[0]
-    zone: ConfigZone = system.config.zones[0]
-    logger.debug(system)
-    # connection.set_config_hold(system_serial=system.serial, zone_id=zone.api_id, activity_name=ActivityNames.MANUAL, hold_until=None)
-    logger.debug(zone.current_activity())
-    # connection.resume_schedule(
-    #     system_serial=system.serial, zone_id=system.config.zones[0].api_id
-    # )
-    # hold_until = zone.next_activity_time()
-    # connection.set_config_mode(system_serial, SystemModes.HEAT.value)
-    # connection.set_config_manual_activity(system_serial=system_serial, zone_id=zone.api_id, heat_set_point=71, cool_set_point=80, fan_mode=FanModes.LOW)
-
-
-asyncio.run(testing())
+username = input("username: ")
+password = getpass()
+connection = ApiConnection(username=username, password=password)
+connection.activate()
+system = connection.get_systems()[0]
+zone: ConfigZone = system.config.zones[0]
+logger.debug(system)
+# connection.set_config_hold(system_serial=system.serial, zone_id=zone.api_id, activity_name=ActivityNames.MANUAL, hold_until=None)
+# logger.debug(zone.current_activity())
+# connection.resume_schedule(
+#     system_serial=system.serial, zone_id=system.config.zones[0].api_id
+# )
+# hold_until = zone.next_activity_time()
+# logger.debug(hold_until)
+# logger.debug(zone.next_activity_time())
+# connection.set_config_mode(system_serial, SystemModes.HEAT.value)
+# connection.set_config_manual_activity(system_serial=system.serial, zone_id=zone.api_id, heat_set_point=71, cool_set_point=80, fan_mode=FanModes.LOW)
