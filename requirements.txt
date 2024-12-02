@@ -4,4 +4,4 @@ xmltodict
 requests-oauthlib
 requests
 python-dateutil
-ruff==0.8.0
+ruff==0.8.1
