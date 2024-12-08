@@ -78,7 +78,7 @@ class ConfigZone:
             yesterday_active_periods = list(self.yesterday_active_periods())
             return self.find_activity(safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityNames))
 
-    def next_activity_time(self) -> str:
+    def next_activity_time(self) -> str | None:
         now = datetime.now()
         sunday_0_index_today = int(now.date().strftime("%w"))
         active_periods = self.today_active_periods()
@@ -89,7 +89,11 @@ class ConfigZone:
             ):
                 return active_period["time"]
         tomorrow_schedule = self.program_json["day"][(sunday_0_index_today + 1) % 7]
-        return active_schedule_periods(tomorrow_schedule["period"])[0]["time"]
+        tomorrow_active_schedule_periods = active_schedule_periods(tomorrow_schedule["period"])
+        if len(tomorrow_active_schedule_periods) > 0:
+            return tomorrow_active_schedule_periods[0]["time"]
+        else:
+            return None
 
     def __repr__(self):
         now = datetime.now()
