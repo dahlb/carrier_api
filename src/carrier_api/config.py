@@ -121,6 +121,7 @@ class Config:
     temperature_unit: str = None
     static_pressure: float = None
     mode: str = None
+    heat_source: str = None
     limit_min: int = None
     limit_max: int = None
     time_stamp: datetime = None
@@ -142,6 +143,7 @@ class Config:
         self.temperature_unit = safely_get_json_value(self.raw_config_json, "cfgem")
         self.static_pressure = safely_get_json_value(self.raw_config_json, "staticPressure")
         self.mode = safely_get_json_value(self.raw_config_json, "mode")
+        self.heat_source = safely_get_json_value(self.raw_config_json, "heatsource")
         self.limit_min = safely_get_json_value(self.raw_config_json, "utilityEvent.minLimit", int)
         self.limit_max = safely_get_json_value(self.raw_config_json, "utilityEvent.maxLimit", int)
         self.time_stamp = isoparse(safely_get_json_value(self.raw_config_json, "timestamp"))

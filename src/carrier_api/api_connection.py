@@ -149,6 +149,16 @@ class ApiConnection:
         }
         self.update_config(system_serial=system_serial, data=data)
 
+    def set_heat_source(self, system_serial: str, head_source: str):
+        if head_source not in ["idu only", "odu only", "system"]:
+            raise ValueError(f"{head_source} is not a valid heat source")
+        data = {
+            "config": {
+                "headsource": head_source,
+            }
+        }
+        self.update_config(system_serial=system_serial, data=data)
+
     def resume_schedule(self, system_serial: str, zone_id: str):
         data = {
             "config": {
