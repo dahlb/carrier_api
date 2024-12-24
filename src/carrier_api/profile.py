@@ -15,6 +15,7 @@ class Profile:
     indoor_model: str = None
     indoor_serial: str = None
     indoor_unit_type: str = None
+    indoor_unit_source: str = None
     outdoor_model: str = None
     outdoor_serial: str = None
     outdoor_unit_type: str = None
@@ -40,6 +41,7 @@ class Profile:
         self.indoor_model = safely_get_json_value(self.raw_profile_json, "indoorModel")
         self.indoor_serial = safely_get_json_value(self.raw_profile_json, "indoorSerial")
         self.indoor_unit_type = safely_get_json_value(self.raw_profile_json, "idutype")
+        self.indoor_unit_source = safely_get_json_value(self.raw_profile_json, "idusource")
         self.outdoor_model = safely_get_json_value(self.raw_profile_json, "outdoorModel")
         self.outdoor_serial = safely_get_json_value(self.raw_profile_json, "outdoorSerial")
         self.outdoor_unit_type = safely_get_json_value(self.raw_profile_json, "odutype")
