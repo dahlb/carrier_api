@@ -25,7 +25,7 @@ class StatusZone:
         self.conditioning: str = safely_get_json_value(status_zone_json, "zoneconditioning")
 
     @property
-    def zone_conditioning_const(self) -> str:
+    def zone_conditioning_const(self) -> SystemModes:
         match self.conditioning:
             case "active_heat" | "prep_heat" | "pending_heat":
                 return SystemModes.HEAT
@@ -99,7 +99,7 @@ class Status:
                 self.zones.append(StatusZone(zone_json))
 
     @property
-    def mode_const(self) -> str:
+    def mode_const(self) -> SystemModes:
         match self.mode:
             case "gasheat" | "electric" | "hpheat":
                 return SystemModes.HEAT
@@ -118,7 +118,6 @@ class Status:
             "humidifier_on": self.humidifier_on,
             "outdoor_unit_operational_status": self.outdoor_unit_operational_status,
             "indoor_unit_operational_status": self.indoor_unit_operational_status,
-            "time_stamp": self.time_stamp.astimezone().strftime("%m/%d/%Y, %H:%M:%S %Z"),
             "zones": [zone.__repr__() for zone in self.zones],
         }
 

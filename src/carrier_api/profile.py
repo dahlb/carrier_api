@@ -58,9 +58,11 @@ class Profile:
             "firmware": self.firmware,
             "indoor_model": self.indoor_model,
             "indoor_serial": self.indoor_serial,
+            "indoor_unit_type": self.indoor_unit_type,
+            "indoor_unit_source": self.indoor_unit_source,
             "outdoor_model": self.outdoor_model,
             "outdoor_serial": self.outdoor_serial,
-            "time_stamp": self.time_stamp.astimezone().strftime("%m/%d/%Y, %H:%M:%S %Z"),
+            "outdoor_unit_type": self.outdoor_unit_type,
             "zone_ids": self.zone_ids,
         }
 

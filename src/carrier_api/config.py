@@ -96,17 +96,13 @@ class ConfigZone:
             return None
 
     def __repr__(self):
-        now = datetime.now()
         builder = {
             "api_id": self.api_id,
             "name": self.name,
-            "now": f"{now.hour}:{now.minute}",
             "current_activity": self.current_activity().__repr__(),
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,
-            "today_active_periods": [period.__repr__() for period in self.today_active_periods()],
-            "yesterday_active_periods": [period.__repr__() for period in self.yesterday_active_periods()],
             "activities": [activity.__repr__() for activity in self.activities],
         }
         if self.hold_activity is not None:
@@ -168,7 +164,6 @@ class Config:
             "heat_source": self.heat_source,
             "limit_min": self.limit_min,
             "limit_max": self.limit_max,
-            "time_stamp": self.time_stamp.astimezone().strftime("%m/%d/%Y, %H:%M:%S %Z"),
             "zones": [zone.__repr__() for zone in self.zones],
         }
 
