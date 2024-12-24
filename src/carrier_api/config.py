@@ -165,6 +165,7 @@ class Config:
             "temperature_unit": self.temperature_unit,
             "static_pressure": self.static_pressure,
             "mode": self.mode,
+            "heat_source": self.heat_source,
             "limit_min": self.limit_min,
             "limit_max": self.limit_max,
             "time_stamp": self.time_stamp.astimezone().strftime("%m/%d/%Y, %H:%M:%S %Z"),
