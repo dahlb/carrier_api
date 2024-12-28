@@ -130,7 +130,7 @@ class ApiConnection:
     def set_heat_source(self, system_serial: str, heat_source: HeatSourceTypes):
         if heat_source not in HeatSourceTypes:
             raise ValueError(f"{heat_source} is not a valid heat source")
-        data = {"config": {"heatsource": heat_source}}
+        data = {"config": {"heatsource": heat_source.value}}
         self.update_config(system_serial=system_serial, data=data)
 
     def set_config_hold(
