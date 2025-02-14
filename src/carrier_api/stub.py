@@ -40,6 +40,7 @@ connection.activate()
 system = connection.get_systems()[0]
 zone: ConfigZone = system.config.zones[0]
 logger.debug(system)
+logger.debug(system.energy)
 # connection.set_config_hold(system_serial=system.serial, zone_id=zone.api_id, activity_name=ActivityNames.MANUAL, hold_until=None)
 # logger.debug(zone.current_activity())
 # connection.resume_schedule(
