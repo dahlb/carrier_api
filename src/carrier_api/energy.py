@@ -38,7 +38,7 @@ class EnergyMeasurement:
 
 
 class Energy:
-    seer: int = None
+    seer: float = None
     hspf: float = None
     cooling: bool = None
     hp_heat: bool = None
@@ -64,7 +64,7 @@ class Energy:
             system_serial=self.system.serial
         )
         _LOGGER.debug(f"raw_energy_json:{self.raw_energy_json}")
-        self.seer: int = safely_get_json_value(self.raw_energy_json, "seer", int)
+        self.seer: float = safely_get_json_value(self.raw_energy_json, "seer", float)
         self.hspf: float = safely_get_json_value(self.raw_energy_json, "hspf", float)
         self.cooling: bool = safely_get_json_value(self.raw_energy_json, "cooling.$.display") == "on" and safely_get_json_value(self.raw_energy_json, "cooling.$.enabled") == "on"
         self.hp_heat: bool = safely_get_json_value(self.raw_energy_json, "hpheat.$.display") == "on" and safely_get_json_value(self.raw_energy_json, "hpheat.$.enabled") == "on"
