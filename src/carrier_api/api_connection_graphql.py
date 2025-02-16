@@ -240,6 +240,7 @@ class ApiConnectionGraphql:
                     hold
                     enabled
                     currentActivity
+                    zoneconditioning
                   }
                 }
                 config {
