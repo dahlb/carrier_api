@@ -53,7 +53,6 @@ class Energy:
         raw,
     ):
         self.raw = raw
-        _LOGGER.debug(f"raw_energy:{self.raw}")
         self.seer: int = safely_get_json_value(self.raw, "energyConfig.seer", float)
         self.hspf: float = safely_get_json_value(self.raw, "energyConfig.hspf", float)
         self.cooling: bool = safely_get_json_value(self.raw, "energyConfig.cooling.display", bool) and safely_get_json_value(self.raw, "energyConfig.cooling.enabled", bool)

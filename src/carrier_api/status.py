@@ -73,7 +73,6 @@ class Status:
         raw,
     ):
         self.raw = raw
-        _LOGGER.debug(f"raw_status:{self.raw}")
         self.outdoor_temperature: float = safely_get_json_value(self.raw, "oat", float)
         self.mode: str = safely_get_json_value(self.raw, "mode")
         self.temperature_unit: TemperatureUnits = TemperatureUnits(self.raw["cfgem"])

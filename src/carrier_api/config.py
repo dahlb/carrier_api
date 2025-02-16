@@ -127,7 +127,6 @@ class Config:
         raw,
     ):
         self.raw = raw
-        _LOGGER.debug(f"raw_config:{self.raw}")
         self.temperature_unit = safely_get_json_value(self.raw, "cfgem")
         self.mode = safely_get_json_value(self.raw, "mode")
         self.heat_source = safely_get_json_value(self.raw, "heatsource")

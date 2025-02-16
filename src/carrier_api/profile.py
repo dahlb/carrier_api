@@ -24,7 +24,6 @@ class Profile:
         raw: dict,
     ):
         self.raw = raw
-        _LOGGER.debug(f"raw_profile:{self.raw}")
         self.name: str = safely_get_json_value(raw, "name")
         self.serial: str = safely_get_json_value(raw, "serial")
         self.model = safely_get_json_value(self.raw, "model")

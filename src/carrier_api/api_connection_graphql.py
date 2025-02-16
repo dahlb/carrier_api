@@ -72,7 +72,6 @@ class ApiConnectionGraphql:
                                            variable_values={"input": {"password": self.password, "username": self.username}},
                                            operation_name="assistedLogin")
             success = result["assistedLogin"]["success"]
-            _LOGGER.debug(result)
             if success:
                 self.expires_at = datetime.now() + timedelta(seconds=result["assistedLogin"]["data"]["expires_in"])
                 self.token_type = result["assistedLogin"]["data"]["token_type"]
@@ -98,7 +97,6 @@ class ApiConnectionGraphql:
         response = await self.api_session.post(url=url, data=json_body)
         response.raise_for_status()
         data = await response.json()
-        _LOGGER.debug(data)
         self.expires_at = datetime.now() + timedelta(seconds=data["expires_in"])
         self.token_type = data["token_type"]
         self.access_token = data["access_token"]
