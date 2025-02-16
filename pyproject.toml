@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "carrier_api"
-version = "2.1.4"
+version = "2.1.5"
 authors = [
   { name="Bren Dahl", email="dahl.brendan@gmail.com" },
 ]
