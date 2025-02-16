@@ -1,7 +1,8 @@
-from .errors import BaseError, RateError, AuthError
-from .const import FanModes, ActivityNames, SystemModes, TemperatureUnits
-from .api_connection import ApiConnection
+from .errors import BaseError, AuthError
+from .const import FanModes, ActivityTypes, SystemModes, TemperatureUnits
+from .api_connection_graphql import ApiConnectionGraphql
 from .config import Config, ConfigZone, ConfigZoneActivity
 from .profile import Profile
 from .status import Status, StatusZone
 from .system import System
+from .energy import Energy

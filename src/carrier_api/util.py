@@ -1,6 +1,6 @@
-import logging
+from logging import getLogger
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = getLogger(__name__)
 
 
 def safely_get_json_value(json, key, callable_to_cast=None):

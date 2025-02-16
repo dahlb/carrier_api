@@ -1,14 +1,12 @@
-import logging
-
-from dateutil.parser import isoparse
-import datetime
-
+from logging import getLogger
 from .util import safely_get_json_value
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = getLogger(__name__)
 
 
 class Profile:
+    name: str = None
+    serial: str = None
     model: str = None
     brand: str = None
     firmware: str = None
@@ -19,37 +17,26 @@ class Profile:
     outdoor_model: str = None
     outdoor_serial: str = None
     outdoor_unit_type: str = None
-    time_stamp: datetime = None
-    zone_ids: [str] = None
-    raw_profile_json: dict = None
+    raw: dict = None
 
     def __init__(
         self,
-        system,
+        raw: dict,
     ):
-        self.system = system
-        self.refresh()
-
-    def refresh(self):
-        self.raw_profile_json = self.system.api_connection.get_profile(
-            system_serial=self.system.serial
-        )
-        _LOGGER.debug(f"raw_profile_json:{self.raw_profile_json}")
-        self.model = safely_get_json_value(self.raw_profile_json, "model")
-        self.brand = safely_get_json_value(self.raw_profile_json, "brand")
-        self.firmware = safely_get_json_value(self.raw_profile_json, "firmware")
-        self.indoor_model = safely_get_json_value(self.raw_profile_json, "indoorModel")
-        self.indoor_serial = safely_get_json_value(self.raw_profile_json, "indoorSerial")
-        self.indoor_unit_type = safely_get_json_value(self.raw_profile_json, "idutype")
-        self.indoor_unit_source = safely_get_json_value(self.raw_profile_json, "idusource")
-        self.outdoor_model = safely_get_json_value(self.raw_profile_json, "outdoorModel")
-        self.outdoor_serial = safely_get_json_value(self.raw_profile_json, "outdoorSerial")
-        self.outdoor_unit_type = safely_get_json_value(self.raw_profile_json, "odutype")
-        self.time_stamp = isoparse(safely_get_json_value(self.raw_profile_json, "timestamp"))
-        self.zone_ids = []
-        for zone in safely_get_json_value(self.raw_profile_json, "zones.zone"):
-            if safely_get_json_value(zone, "present") == "on":
-                self.zone_ids.append(safely_get_json_value(zone, "$.id"))
+        self.raw = raw
+        _LOGGER.debug(f"raw_profile:{self.raw}")
+        self.name: str = safely_get_json_value(raw, "name")
+        self.serial: str = safely_get_json_value(raw, "serial")
+        self.model = safely_get_json_value(self.raw, "model")
+        self.brand = safely_get_json_value(self.raw, "brand")
+        self.firmware = safely_get_json_value(self.raw, "firmware")
+        self.indoor_model = safely_get_json_value(self.raw, "indoorModel")
+        self.indoor_serial = safely_get_json_value(self.raw, "indoorSerial")
+        self.indoor_unit_type = safely_get_json_value(self.raw, "idutype")
+        self.indoor_unit_source = safely_get_json_value(self.raw, "idusource")
+        self.outdoor_model = safely_get_json_value(self.raw, "outdoorModel")
+        self.outdoor_serial = safely_get_json_value(self.raw, "outdoorSerial")
+        self.outdoor_unit_type = safely_get_json_value(self.raw, "odutype")
 
     def __repr__(self):
         return {
@@ -63,7 +50,6 @@ class Profile:
             "outdoor_model": self.outdoor_model,
             "outdoor_serial": self.outdoor_serial,
             "outdoor_unit_type": self.outdoor_unit_type,
-            "zone_ids": self.zone_ids,
         }
 
     def __str__(self):

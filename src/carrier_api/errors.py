@@ -1,13 +1,9 @@
-from requests import HTTPError
+from graphql import GraphQLError
 
 
-class BaseError(HTTPError):
+class BaseError(GraphQLError):
     pass
 
 
-class RateError(BaseError):
-    pass
-
-
-class AuthError(BaseError):
+class AuthError(GraphQLError):
     pass

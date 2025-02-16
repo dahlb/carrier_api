@@ -1,19 +1,18 @@
-import logging
-
+from logging import getLogger
 from dateutil.parser import isoparse
-import datetime
+from datetime import datetime
 
-from .const import SystemModes, TemperatureUnits, FanModes, ActivityNames
+from .const import SystemModes, TemperatureUnits, FanModes, ActivityTypes
 from .util import safely_get_json_value
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = getLogger(__name__)
 
 
 class StatusZone:
     def __init__(self, status_zone_json: dict):
-        self.api_id = safely_get_json_value(status_zone_json, "$.id")
+        self.api_id = safely_get_json_value(status_zone_json, "id")
         self.name: str = safely_get_json_value(status_zone_json, "name")
-        self.current_activity: ActivityNames = ActivityNames(status_zone_json["currentActivity"])
+        self.current_activity: ActivityTypes = ActivityTypes(status_zone_json["currentActivity"])
         self.temperature: float = safely_get_json_value(status_zone_json, "rt", float)
         self.humidity: int = safely_get_json_value(status_zone_json, "rh", int)
         self.occupancy: bool = safely_get_json_value(status_zone_json, "occupancy") == "occupied"
@@ -67,34 +66,28 @@ class Status:
     indoor_unit_operational_status: str = None
     time_stamp: datetime = None
     zones: [StatusZone] = None
-    raw_status_json: dict = None
+    raw: dict = None
 
     def __init__(
         self,
-        system,
+        raw,
     ):
-        self.system = system
-        self.refresh()
-
-    def refresh(self):
-        self.raw_status_json = self.system.api_connection.get_status(
-            system_serial=self.system.serial
-        )
-        _LOGGER.debug(f"raw_status_json:{self.raw_status_json}")
-        self.outdoor_temperature: float = safely_get_json_value(self.raw_status_json, "oat", float)
-        self.mode: str = safely_get_json_value(self.raw_status_json, "mode")
-        self.temperature_unit: TemperatureUnits = TemperatureUnits(self.raw_status_json["cfgem"])
-        self.filter_used: int = safely_get_json_value(self.raw_status_json, "filtrlvl", int)
-        self.humidity_level: int = safely_get_json_value(self.raw_status_json, "humlvl", int)
-        if self.raw_status_json.get('humid') is not None:
-            self.humidifier_on: bool = safely_get_json_value(self.raw_status_json, "humid", str) == 'on'
-        self.is_disconnected: bool = safely_get_json_value(self.raw_status_json, "isDisconnected", bool)
-        self.airflow_cfm: int = safely_get_json_value(self.raw_status_json, "idu.cfm", int)
-        self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "odu.opstat")
-        self.indoor_unit_operational_status: str = safely_get_json_value(self.raw_status_json, "idu.opstat")
-        self.time_stamp = isoparse(safely_get_json_value(self.raw_status_json, "timestamp"))
+        self.raw = raw
+        _LOGGER.debug(f"raw_status:{self.raw}")
+        self.outdoor_temperature: float = safely_get_json_value(self.raw, "oat", float)
+        self.mode: str = safely_get_json_value(self.raw, "mode")
+        self.temperature_unit: TemperatureUnits = TemperatureUnits(self.raw["cfgem"])
+        self.filter_used: int = safely_get_json_value(self.raw, "filtrlvl", int)
+        self.humidity_level: int = safely_get_json_value(self.raw, "humlvl", int)
+        if self.raw.get('humid') is not None:
+            self.humidifier_on: bool = safely_get_json_value(self.raw, "humid", str) == 'on'
+        self.is_disconnected: bool = safely_get_json_value(self.raw, "isDisconnected", bool)
+        self.airflow_cfm: int = safely_get_json_value(self.raw, "idu.cfm", int)
+        self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw, "odu.opstat")
+        self.indoor_unit_operational_status: str = safely_get_json_value(self.raw, "idu.opstat")
+        self.time_stamp = isoparse(safely_get_json_value(self.raw, "utcTime"))
         self.zones = []
-        for zone_json in self.raw_status_json["zones"]["zone"]:
+        for zone_json in self.raw["zones"]:
             if safely_get_json_value(zone_json, "enabled") == "on":
                 self.zones.append(StatusZone(zone_json))
 

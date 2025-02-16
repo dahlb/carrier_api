@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 name = "carrier_api"
 version = "1.17.1"
 authors = [
-  { name="Brendan Dahl", email="dahl.brendan@gmail.com" },
+  { name="Bren Dahl", email="dahl.brendan@gmail.com" },
 ]
 description = "Carrier Api Wrapper"
 readme = "README.md"
@@ -27,10 +27,7 @@ keywords = [
     "api"
 ]
 dependencies = [
-    "xmltodict",
-    "requests-oauthlib",
-    "requests",
-    "python-dateutil"
+    "gql[aiohttp]"
 ]
 
 [project.urls]

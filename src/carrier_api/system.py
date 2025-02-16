@@ -1,4 +1,4 @@
-import logging
+from logging import getLogger
 
 from .profile import Profile
 from .status import Status
@@ -6,32 +6,30 @@ from .energy import Energy
 from .config import Config
 
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = getLogger(__name__)
 
 
 class System:
     def __init__(
-        self,
-        api_connection,
-        serial: str,
-        name: str,
+            self,
+            profile: Profile,
+            status: Status,
+            config: Config = None,
+            energy: Energy = None,
     ):
-        self.api_connection = api_connection
-        self.serial = serial
-        self.name = name
-        self.profile = Profile(system=self)
-        self.status = Status(system=self)
-        self.energy = Energy(system=self)
-        self.config = Config(system=self)
+        self.profile = profile
+        self.status = status
+        self.energy = energy
+        self.config = config
 
     def __repr__(self):
         return {
-            "serial": self.serial,
-            "name": self.name,
+            "serial": self.profile.serial,
+            "name": self.profile.name,
             "profile": self.profile.__repr__(),
             "status": self.status.__repr__(),
-            "energy": self.energy.__repr__(),
             "config": self.config.__repr__(),
+            "energy": self.energy.__repr__(),
         }
 
     def __str__(self):

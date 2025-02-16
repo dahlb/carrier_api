@@ -8,8 +8,7 @@
 
 Api Wrapper for Carrier Infinity API using async in python, this was inspired by [this guide](https://developers.home-assistant.io/docs/api_lib_index) to be a lightweight wrapper, with simple error handling.
 
-a lot of this is based on [homebridge-carrier-infinity](https://github.com/grivkees/homebridge-carrier-infinity).
-
+a lot of this is based on https://my.carrier.com/.
 
 ***
 
@@ -23,3 +22,14 @@ a lot of this is based on [homebridge-carrier-infinity](https://github.com/grivk
 [releases]: https://github.com/dahlb/carrier_api/releases
 [buymecoffee]: https://www.buymeacoffee.com/dahlb
 [buymecoffeebadge]: https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow.svg?style=for-the-badge
+
+
+to update schema add this to api_connection_graphql#authed_query
+```
+introspection_query = get_introspection_query(**session.client.introspection_args)
+execution_result = await transport.execute(parse(introspection_query))
+schema = dumps(execution_result.data, indent=2)
+_LOGGER.debug(schema)
+with open("schema.graphql", "w") as f:
+    f.write(schema)
+```

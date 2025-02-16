@@ -1,11 +1,10 @@
-import logging
+from logging import getLogger
 from datetime import datetime
-from dateutil.parser import isoparse
 
-from .const import FanModes, ActivityNames
+from .const import FanModes, ActivityTypes
 from .util import safely_get_json_value
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = getLogger(__name__)
 
 
 def active_schedule_periods(periods_json: [dict]):
@@ -14,14 +13,16 @@ def active_schedule_periods(periods_json: [dict]):
 
 class ConfigZoneActivity:
     def __init__(self, zone_activity_json: dict):
-        self.api_id: ActivityNames = ActivityNames(safely_get_json_value(zone_activity_json, "$.id"))
+        self.type: ActivityTypes = ActivityTypes(safely_get_json_value(zone_activity_json, "type"))
+        self.api_id = safely_get_json_value(zone_activity_json, "id")
         self.fan: FanModes = FanModes(zone_activity_json["fan"])
         self.heat_set_point: float = safely_get_json_value(zone_activity_json, "htsp", float)
         self.cool_set_point: float = safely_get_json_value(zone_activity_json, "clsp", float)
 
     def __repr__(self):
         return {
-            "api_id": self.api_id.value,
+            "api_id": self.api_id,
+            "type": self.type.value,
             "fan": self.fan.value,
             "heat_set_point": self.heat_set_point,
             "cool_set_point": self.cool_set_point,
@@ -33,22 +34,22 @@ class ConfigZoneActivity:
 
 class ConfigZone:
     def __init__(self, zone_json: dict, vacation_json: dict):
-        self.api_id = safely_get_json_value(zone_json, "$.id")
+        self.api_id = safely_get_json_value(zone_json, "id")
         self.name: str = safely_get_json_value(zone_json, "name")
-        self.hold_activity: ActivityNames = safely_get_json_value(zone_json, "holdActivity", ActivityNames)
+        self.hold_activity: ActivityTypes = safely_get_json_value(zone_json, "holdActivity", ActivityTypes)
         self.hold: bool = safely_get_json_value(zone_json, "hold") == "on"
         self.hold_until: str = safely_get_json_value(zone_json, "otmr")
         self.program_json: dict = safely_get_json_value(zone_json, "program")
         self.activities = []
-        for zone_activity_json in safely_get_json_value(zone_json, "activities.activity"):
+        for zone_activity_json in safely_get_json_value(zone_json, "activities"):
             self.activities.append(
                 ConfigZoneActivity(zone_activity_json=zone_activity_json)
             )
         self.activities.append(ConfigZoneActivity(zone_activity_json=vacation_json))
 
-    def find_activity(self, activity_name: ActivityNames):
+    def find_activity(self, activity_name: ActivityTypes):
         for activity in self.activities:
-            if activity.api_id == activity_name:
+            if activity.type == activity_name:
                 return activity
 
     def yesterday_active_periods(self):
@@ -74,9 +75,9 @@ class ConfigZone:
                 if (int(hours) < now.hour) or (
                     int(hours) == now.hour and int(minutes) < now.minute
                 ):
-                    return self.find_activity(safely_get_json_value(active_period, "activity", ActivityNames))
+                    return self.find_activity(safely_get_json_value(active_period, "activity", ActivityTypes))
             yesterday_active_periods = list(self.yesterday_active_periods())
-            return self.find_activity(safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityNames))
+            return self.find_activity(safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityTypes))
 
     def next_activity_time(self) -> str | None:
         now = datetime.now()
@@ -115,42 +116,30 @@ class ConfigZone:
 
 class Config:
     temperature_unit: str = None
-    static_pressure: float = None
     mode: str = None
     heat_source: str = None
-    limit_min: int = None
-    limit_max: int = None
-    time_stamp: datetime = None
+    etag: str = None
     zones: [ConfigZone] = None
-    raw_config_json: dict = None
+    raw: dict = None
 
     def __init__(
         self,
-        system,
+        raw,
     ):
-        self.system = system
-        self.refresh()
-
-    def refresh(self):
-        self.raw_config_json = self.system.api_connection.get_config(
-            system_serial=self.system.serial
-        )
-        _LOGGER.debug(f"raw_config_json:{self.raw_config_json}")
-        self.temperature_unit = safely_get_json_value(self.raw_config_json, "cfgem")
-        self.static_pressure = safely_get_json_value(self.raw_config_json, "staticPressure")
-        self.mode = safely_get_json_value(self.raw_config_json, "mode")
-        self.heat_source = safely_get_json_value(self.raw_config_json, "heatsource")
-        self.limit_min = safely_get_json_value(self.raw_config_json, "utilityEvent.minLimit", int)
-        self.limit_max = safely_get_json_value(self.raw_config_json, "utilityEvent.maxLimit", int)
-        self.time_stamp = isoparse(safely_get_json_value(self.raw_config_json, "timestamp"))
+        self.raw = raw
+        _LOGGER.debug(f"raw_config:{self.raw}")
+        self.temperature_unit = safely_get_json_value(self.raw, "cfgem")
+        self.mode = safely_get_json_value(self.raw, "mode")
+        self.heat_source = safely_get_json_value(self.raw, "heatsource")
+        self.etag = safely_get_json_value(self.raw, "etag")
         vacation_json = {
-            "$": {"id": "vacation"},
-            "clsp": self.raw_config_json["vacmaxt"],
-            "htsp": self.raw_config_json["vacmint"],
-            "fan": self.raw_config_json["vacfan"],
+            "type": "vacation",
+            "clsp": self.raw["vacmaxt"],
+            "htsp": self.raw["vacmint"],
+            "fan": self.raw["vacfan"],
         }
         self.zones = []
-        for zone_json in safely_get_json_value(self.raw_config_json, "zones.zone"):
+        for zone_json in safely_get_json_value(self.raw, "zones"):
             if safely_get_json_value(zone_json, "enabled") == "on":
                 self.zones.append(
                     ConfigZone(zone_json=zone_json, vacation_json=vacation_json)
@@ -159,11 +148,8 @@ class Config:
     def __repr__(self):
         return {
             "temperature_unit": self.temperature_unit,
-            "static_pressure": self.static_pressure,
             "mode": self.mode,
             "heat_source": self.heat_source,
-            "limit_min": self.limit_min,
-            "limit_max": self.limit_max,
             "zones": [zone.__repr__() for zone in self.zones],
         }
 
