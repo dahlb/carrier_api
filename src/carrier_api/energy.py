@@ -56,14 +56,14 @@ class Energy:
         _LOGGER.debug(f"raw_energy:{self.raw}")
         self.seer: int = safely_get_json_value(self.raw, "energyConfig.seer", float)
         self.hspf: float = safely_get_json_value(self.raw, "energyConfig.hspf", float)
-        self.cooling: bool = safely_get_json_value(self.raw, "energyConfig.cooling.display") == "on" and safely_get_json_value(self.raw, "energyConfig.cooling.enabled") == "on"
-        self.hp_heat: bool = safely_get_json_value(self.raw, "energyConfig.hpheat.display") == "on" and safely_get_json_value(self.raw, "energyConfig.hpheat.enabled") == "on"
-        self.fan: bool = safely_get_json_value(self.raw, "energyConfig.fan.display") == "on" and safely_get_json_value(self.raw, "energyConfig.fan.enabled") == "on"
-        self.electric_heat: bool = safely_get_json_value(self.raw, "energyConfig.eheat.display") == "on" and safely_get_json_value(self.raw, "energyConfig.eheat.enabled") == "on"
-        self.reheat: bool = safely_get_json_value(self.raw, "energyConfig.reheat.display") == "on" and safely_get_json_value(self.raw, "energyConfig.reheat.enabled") == "on"
-        self.fan_gas: bool = safely_get_json_value(self.raw, "energyConfig.fangas.display") == "on" and safely_get_json_value(self.raw, "energyConfig.fangas.enabled") == "on"
-        self.gas: bool = safely_get_json_value(self.raw, "energyConfig.gas.display") == "on" and safely_get_json_value(self.raw, "energyConfig.gas.enabled") == "on"
-        self.loop_pump: bool = safely_get_json_value(self.raw, "energyConfig.looppump.display") == "on" and safely_get_json_value(self.raw, "energyConfig.looppump.enabled") == "on"
+        self.cooling: bool = safely_get_json_value(self.raw, "energyConfig.cooling.display", bool) and safely_get_json_value(self.raw, "energyConfig.cooling.enabled", bool)
+        self.hp_heat: bool = safely_get_json_value(self.raw, "energyConfig.hpheat.display", bool) and safely_get_json_value(self.raw, "energyConfig.hpheat.enabled", bool)
+        self.fan: bool = safely_get_json_value(self.raw, "energyConfig.fan.display", bool) and safely_get_json_value(self.raw, "energyConfig.fan.enabled", bool)
+        self.electric_heat: bool = safely_get_json_value(self.raw, "energyConfig.eheat.display", bool) and safely_get_json_value(self.raw, "energyConfig.eheat.enabled", bool)
+        self.reheat: bool = safely_get_json_value(self.raw, "energyConfig.reheat.display", bool) and safely_get_json_value(self.raw, "energyConfig.reheat.enabled", bool)
+        self.fan_gas: bool = safely_get_json_value(self.raw, "energyConfig.fangas.display", bool) and safely_get_json_value(self.raw, "energyConfig.fangas.enabled", bool)
+        self.gas: bool = safely_get_json_value(self.raw, "energyConfig.gas.display", bool) and safely_get_json_value(self.raw, "energyConfig.gas.enabled", bool)
+        self.loop_pump: bool = safely_get_json_value(self.raw, "energyConfig.looppump.display", bool) and safely_get_json_value(self.raw, "energyConfig.looppump.enabled", bool)
         self.periods = []
         for period_json in self.raw["energyPeriods"]:
             self.periods.append(EnergyMeasurement(period_json))
