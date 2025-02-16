@@ -503,9 +503,9 @@ class ApiConnectionGraphql:
         variables = {
             "input": {
                 "serial": system_serial,
+                "zoneId": zone_id,
                 "activityType": activity_type.value,
                 "fan": fan_mode.value,
-                "zoneId": zone_id
             }
         }
         return await self._update_infinity_zone_activity(variables=variables)
@@ -522,10 +522,10 @@ class ApiConnectionGraphql:
         variables = {
             "input": {
                 "serial": system_serial,
+                "zoneId": zone_id,
                 "hold": "on",
                 "holdActivity": activity_type.value,
                 "otmr": hold_until,
-                "zoneId": zone_id
             }
         }
         return await self._update_infinity_zone_config(variables=variables)
@@ -534,10 +534,10 @@ class ApiConnectionGraphql:
         variables = {
             "input": {
                 "serial": system_serial,
+                "zoneId": zone_id,
                 "hold": "off",
                 "holdActivity": None,
                 "otmr": None,
-                "zoneId": zone_id
             }
         }
         return await self._update_infinity_zone_config(variables=variables)
@@ -548,18 +548,19 @@ class ApiConnectionGraphql:
         zone_id: str,
         heat_set_point: str,
         cool_set_point: str,
-        fan_mode: FanModes,
+        fan_mode: FanModes = None,
     ):
-        if fan_mode not in FanModes:
-            raise ValueError(f"{fan_mode} is not a valid fan mode")
         variables = {
             "input": {
                 "serial": system_serial,
+                "zoneId": zone_id,
                 "activityType": "manual",
                 "clsp": cool_set_point,
-                "fan": fan_mode.value,
                 "htsp": heat_set_point,
-                "zoneId": zone_id
             }
         }
+        if fan_mode is not None:
+            if fan_mode not in FanModes:
+                raise ValueError(f"{fan_mode} is not a valid fan mode")
+            variables["input"]["fan"] = fan_mode.value
         return await self._update_infinity_zone_activity(variables=variables)
