@@ -1,12 +1,10 @@
 from datetime import datetime, timedelta
-from json import dumps
 from logging import getLogger
-from typing import Any, Union, Dict, List
+from typing import Any
 
 from aiohttp import ClientSession
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
-from graphql import ExecutionResult, get_introspection_query, parse
 
 from .const import (
     FanModes,
@@ -104,7 +102,7 @@ class ApiConnectionGraphql:
         self.access_token = data["access_token"]
         self.refresh_token = data["refresh_token"]
 
-    async def authed_query(self, operation_name: str, query: gql, variable_values: Dict[str, Any]) -> Union[Dict[str, Any], ExecutionResult]:
+    async def authed_query(self, operation_name: str, query: gql, variable_values: dict[str, Any]) -> dict[str, Any]:
         await self.check_auth_expiration()
         transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql",
                                      headers={'Authorization': f"{self.token_type} {self.access_token}"})
@@ -114,7 +112,7 @@ class ApiConnectionGraphql:
         ) as session:
             return await session.execute(query, variable_values=variable_values, operation_name=operation_name)
 
-    async def get_user_info(self) -> Dict[str, Any]:
+    async def get_user_info(self) -> dict[str, Any]:
         operation_name = "getUser"
         query = gql(
             """
@@ -185,7 +183,7 @@ class ApiConnectionGraphql:
         variable_values = {"userName": self.username}
         return await self.authed_query(operation_name=operation_name, query=query, variable_values=variable_values)
 
-    async def get_systems(self) -> Dict[str, Any]:
+    async def get_systems(self) -> dict[str, Any]:
         operation_name = "getInfinitySystems"
         query = gql(
             """
@@ -342,7 +340,7 @@ class ApiConnectionGraphql:
         variable_values = {"userName": self.username}
         return await self.authed_query(operation_name=operation_name, query=query, variable_values=variable_values)
 
-    async def get_energy(self, system_serial: str) -> Dict[str, Any]:
+    async def get_energy(self, system_serial: str) -> dict[str, Any]:
         operation_name = "getInfinityEnergy"
         query = gql(
             """
@@ -402,7 +400,7 @@ class ApiConnectionGraphql:
         variable_values = {"serial": system_serial}
         return await self.authed_query(operation_name=operation_name, query=query, variable_values=variable_values)
 
-    async def load_data(self) -> List[System]:
+    async def load_data(self) -> list[System]:
         system_response = await self.get_systems()
         systems = []
         for system_response in system_response["infinitySystems"]:
@@ -414,7 +412,7 @@ class ApiConnectionGraphql:
             systems.append(System(profile=profile, status=status, config=config, energy=energy))
         return systems
 
-    async def _update_infinity_config(self, variables: Dict[str, Any]) -> Dict[str, Any]:
+    async def _update_infinity_config(self, variables: dict[str, Any]) -> dict[str, Any]:
         query = gql(
             """
             mutation updateInfinityConfig($input: InfinityConfigInput!) {
@@ -426,7 +424,7 @@ class ApiConnectionGraphql:
         )
         return await self.authed_query(operation_name="updateInfinityConfig", query=query, variable_values=variables)
 
-    async def _update_infinity_zone_activity(self, variables: Dict[str, Any]) -> Dict[str, Any]:
+    async def _update_infinity_zone_activity(self, variables: dict[str, Any]) -> dict[str, Any]:
         query = gql(
             """
             mutation updateInfinityZoneActivity($input: InfinityZoneActivityInput!) {
@@ -438,7 +436,7 @@ class ApiConnectionGraphql:
         )
         return await self.authed_query(operation_name="updateInfinityZoneActivity", query=query, variable_values=variables)
 
-    async def _update_infinity_zone_config(self, variables: Dict[str, Any]) -> Dict[str, Any]:
+    async def _update_infinity_zone_config(self, variables: dict[str, Any]) -> dict[str, Any]:
         query = gql(
             """
             mutation updateInfinityZoneConfig($input: InfinityZoneConfigInput!) {
@@ -450,7 +448,7 @@ class ApiConnectionGraphql:
         )
         return await self.authed_query(operation_name="updateInfinityZoneConfig", query=query, variable_values=variables)
 
-    async def set_config_mode(self, system_serial: str, mode: SystemModes) -> Dict[str, Any]:
+    async def set_config_mode(self, system_serial: str, mode: SystemModes) -> dict[str, Any]:
         if mode not in SystemModes:
             raise ValueError(f"{mode} is not a valid system mode")
         variables = {
@@ -461,7 +459,7 @@ class ApiConnectionGraphql:
         }
         return await self._update_infinity_config(variables)
 
-    async def set_heat_source(self, system_serial: str, heat_source: HeatSourceTypes) -> Dict[str, Any]:
+    async def set_heat_source(self, system_serial: str, heat_source: HeatSourceTypes) -> dict[str, Any]:
         if heat_source not in HeatSourceTypes:
             raise ValueError(f"{heat_source} is not a valid heat source")
         variables = {
@@ -472,7 +470,7 @@ class ApiConnectionGraphql:
         }
         return await self._update_infinity_config(variables)
 
-    async def set_humidifier(self, system_serial: str, humidifier_on: bool = None, over_cooling: bool = None, cooling_percent: 5|10|15|20|25|30|35|40|45 = None, heating_percent: 5|10|15|20|25|30|35|40|45 = None) -> Dict[str, Any]:
+    async def set_humidifier(self, system_serial: str, humidifier_on: bool = None, over_cooling: bool = None, cooling_percent: 5|10|15|20|25|30|35|40|45 = None, heating_percent: 5|10|15|20|25|30|35|40|45 = None) -> dict[str, Any]:
         variables = {
             "input": {
                 "serial": system_serial,
@@ -495,7 +493,7 @@ class ApiConnectionGraphql:
             variables["input"]["humidityHome"]["rhtg"] = heating_percent / 5
         return await self._update_infinity_config(variables)
 
-    async def update_fan(self, system_serial: str, zone_id: str, activity_type: ActivityTypes, fan_mode: FanModes) -> Dict[str, Any]:
+    async def update_fan(self, system_serial: str, zone_id: str, activity_type: ActivityTypes, fan_mode: FanModes) -> dict[str, Any]:
         if fan_mode not in FanModes:
             raise ValueError(f"{fan_mode} is not a valid fan mode")
         if activity_type not in ActivityTypes:
