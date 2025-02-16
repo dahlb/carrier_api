@@ -27,10 +27,8 @@ async def main():
     api_connection = None
     try:
         api_connection = ApiConnectionGraphql(username=username, password=password)
-        await api_connection.login()
         systems = await api_connection.load_data()
-        for system in systems:
-            print(system)
+        print([system.__repr__() for system in systems])
     finally:
         if api_connection is not None:
             await api_connection.cleanup()

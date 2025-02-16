@@ -82,6 +82,8 @@ class ApiConnectionGraphql:
                 raise AuthError(result)
 
     async def check_auth_expiration(self) -> None:
+        if self.refresh_token is None:
+            await self.login()
         if self.expires_at < datetime.now():
             await self.refresh_auth_token()
 
