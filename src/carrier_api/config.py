@@ -119,6 +119,8 @@ class Config:
     mode: str = None
     heat_source: str = None
     etag: str = None
+    fuel_type: str = None
+    gas_unit: str = None
     zones: [ConfigZone] = None
     raw: dict = None
 
@@ -131,6 +133,8 @@ class Config:
         self.mode = safely_get_json_value(self.raw, "mode")
         self.heat_source = safely_get_json_value(self.raw, "heatsource")
         self.etag = safely_get_json_value(self.raw, "etag")
+        self.fuel_type = safely_get_json_value(self.raw, "gas")
+        self.gas_unit = safely_get_json_value(self.raw, "therm")
         vacation_json = {
             "type": "vacation",
             "clsp": self.raw["vacmaxt"],
