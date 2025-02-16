@@ -546,8 +546,8 @@ class ApiConnectionGraphql:
         self,
         system_serial: str,
         zone_id: str,
-        heat_set_point: int,
-        cool_set_point: int,
+        heat_set_point: str,
+        cool_set_point: str,
         fan_mode: FanModes,
     ):
         if fan_mode not in FanModes:
@@ -556,9 +556,9 @@ class ApiConnectionGraphql:
             "input": {
                 "serial": system_serial,
                 "activityType": "manual",
-                "clsp": float(cool_set_point),
+                "clsp": cool_set_point,
                 "fan": fan_mode.value,
-                "htsp": float(heat_set_point),
+                "htsp": heat_set_point,
                 "zoneId": zone_id
             }
         }
