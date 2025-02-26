@@ -123,6 +123,7 @@ class Config:
     gas_unit: str = None
     zones: [ConfigZone] = None
     uv_enabled: bool = None
+    humidifier_enabled: bool = None
     raw: dict = None
 
     def __init__(
@@ -137,6 +138,7 @@ class Config:
         self.fuel_type = safely_get_json_value(self.raw, "fueltype")
         self.gas_unit = safely_get_json_value(self.raw, "gasunit")
         self.uv_enabled = safely_get_json_value(self.raw, "cfguv") == "on"
+        self.humidifier_enabled = safely_get_json_value(self.raw, "cfghumid") == "on"
         vacation_json = {
             "type": "vacation",
             "clsp": self.raw["vacmaxt"],
