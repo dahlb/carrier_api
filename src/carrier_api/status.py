@@ -62,6 +62,7 @@ class Status:
     airflow_cfm: int = None
     humidity_level: int = None
     humidifier_on: bool = None
+    uv_lamp_level: int = None
     outdoor_unit_operational_status: str = None
     indoor_unit_operational_status: str = None
     time_stamp: datetime = None
@@ -80,6 +81,7 @@ class Status:
         self.humidity_level: int = safely_get_json_value(self.raw, "humlvl", int)
         if self.raw.get('humid') is not None:
             self.humidifier_on: bool = safely_get_json_value(self.raw, "humid", str) == 'on'
+        self.uv_lamp_level: int = safely_get_json_value(self.raw, "uvlvl", int)
         self.is_disconnected: bool = safely_get_json_value(self.raw, "isDisconnected", bool)
         self.airflow_cfm: int = safely_get_json_value(self.raw, "idu.cfm", int)
         self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw, "odu.opstat")
