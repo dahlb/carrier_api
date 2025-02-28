@@ -27,7 +27,8 @@ keywords = [
     "api"
 ]
 dependencies = [
-    "gql[aiohttp]"
+    "gql[aiohttp]",
+    "websockets>=15.0"
 ]
 
 [project.urls]

@@ -3,6 +3,7 @@ from logging import getLogger
 from typing import Any
 
 from aiohttp import ClientSession
+from websockets.asyncio.client import connect
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
@@ -42,6 +43,13 @@ class ApiConnectionGraphql:
 
     async def cleanup(self) -> None:
         await self.api_session.close()
+
+    async def websocket(self, callback) -> None:
+        await self.check_auth_expiration()
+
+        async with connect(f"wss://realtime.infinity.iot.carrier.com/?Token={self.access_token}") as websocket:
+            async for message in websocket:
+                callback(message)
 
     async def login(self) -> None:
         transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth")
