@@ -1,9 +1,9 @@
+import asyncio
 from datetime import datetime, timedelta
 from logging import getLogger
 from typing import Any
 
 from aiohttp import ClientSession, WSMsgType
-from websockets.asyncio.client import connect
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
@@ -27,6 +27,8 @@ class ApiConnectionGraphql:
     refresh_token: str = None
     token_type: str = None
     access_token: str = None
+    ws = None
+    ws_heartbeat = None
 
     def __init__(
             self,
@@ -44,22 +46,33 @@ class ApiConnectionGraphql:
     async def cleanup(self) -> None:
         await self.api_session.close()
 
-    async def websocket(self, async_callback) -> None:
+    async def ws_listener(self, async_callback) -> None:
         await self.check_auth_expiration()
 
-        async with self.api_session.ws_connect(f"wss://realtime.infinity.iot.carrier.com/?Token={self.access_token}", heartbeat=55) as ws:
-            async for msg in ws:
+        async with self.api_session.ws_connect(f"wss://realtime.infinity.iot.carrier.com/?Token={self.access_token}") as self.ws:
+            loop = asyncio.get_event_loop()
+            async def ws_heartbeat() -> None:
+                while True:
+                    await self.ws.send_json({"action": "keepalive"})
+                    _LOGGER.debug("ws: kept alive")
+                    await asyncio.sleep(55)
+            self.ws_heartbeat = loop.create_task(ws_heartbeat())
+            async for msg in self.ws:
                 if msg.type == WSMsgType.TEXT:
                     if msg.data == 'close cmd':
-                        await ws.close()
+                        await self.ws.close()
                         break
                     else:
                         await async_callback(msg.data)
                 elif msg.type == WSMsgType.ERROR:
                     break
-#                await ws.send_json({"action": "reconcile"})
-#                await ws.send_json({"action":"keepalive"})
-            _LOGGER.debug("closed websocket")
+            _LOGGER.debug("ws: closed")
+            self.ws = None
+
+    async def ws_reconcile(self) -> None:
+        if self.ws is not None:
+            await self.ws.send_json({"action": "reconcile"})
+            _LOGGER.debug("ws: reconciled")
 
     async def login(self) -> None:
         transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth")
@@ -240,6 +253,8 @@ class ApiConnectionGraphql:
                     type
                     opstat
                     cfm
+                    statpress
+                    blwrpm
                   }
                   vent
                   ventlvl
@@ -441,7 +456,9 @@ class ApiConnectionGraphql:
             }
             """
         )
-        return await self.authed_query(operation_name="updateInfinityConfig", query=query, variable_values=variables)
+        response = await self.authed_query(operation_name="updateInfinityConfig", query=query, variable_values=variables)
+        await self.ws_reconcile()
+        return response
 
     async def _update_infinity_zone_activity(self, variables: dict[str, Any]) -> dict[str, Any]:
         query = gql(
@@ -453,7 +470,9 @@ class ApiConnectionGraphql:
             }
             """
         )
-        return await self.authed_query(operation_name="updateInfinityZoneActivity", query=query, variable_values=variables)
+        response = await self.authed_query(operation_name="updateInfinityZoneActivity", query=query, variable_values=variables)
+        await self.ws_reconcile()
+        return response
 
     async def _update_infinity_zone_config(self, variables: dict[str, Any]) -> dict[str, Any]:
         query = gql(
@@ -465,7 +484,9 @@ class ApiConnectionGraphql:
             }
             """
         )
-        return await self.authed_query(operation_name="updateInfinityZoneConfig", query=query, variable_values=variables)
+        response = await self.authed_query(operation_name="updateInfinityZoneConfig", query=query, variable_values=variables)
+        await self.ws_reconcile()
+        return response
 
     async def set_config_mode(self, system_serial: str, mode: SystemModes) -> dict[str, Any]:
         if mode not in SystemModes:

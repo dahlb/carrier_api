@@ -60,6 +60,8 @@ class Status:
     filter_used: int = None
     is_disconnected: bool = None
     airflow_cfm: int = None
+    blower_rpm: int = None
+    static_pressure: float = None
     humidity_level: int = None
     humidifier_on: bool = None
     uv_lamp_level: int = None
@@ -84,6 +86,8 @@ class Status:
         self.uv_lamp_level: int = safely_get_json_value(self.raw, "uvlvl", int)
         self.is_disconnected: bool = safely_get_json_value(self.raw, "isDisconnected", bool)
         self.airflow_cfm: int = safely_get_json_value(self.raw, "idu.cfm", int)
+        self.blower_rpm: int = safely_get_json_value(self.raw, "idu.blwrpm", int)
+        self.static_pressure: int = safely_get_json_value(self.raw, "idu.statpress", float)
         self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw, "odu.opstat")
         self.indoor_unit_operational_status: str = safely_get_json_value(self.raw, "idu.opstat")
         self.time_stamp = isoparse(safely_get_json_value(self.raw, "utcTime"))
@@ -108,6 +112,8 @@ class Status:
             "filter_used": self.filter_used,
             "is_disconnected": self.is_disconnected,
             "airflow_cfm": self.airflow_cfm,
+            "blower_rpm": self.blower_rpm,
+            "static_pressure": self.static_pressure,
             "humidity_level": self.humidity_level,
             "humidifier_on": self.humidifier_on,
             "outdoor_unit_operational_status": self.outdoor_unit_operational_status,
