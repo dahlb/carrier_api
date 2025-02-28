@@ -57,6 +57,7 @@ class ApiConnectionGraphql:
                         await async_callback(msg.data)
                 elif msg.type == WSMsgType.ERROR:
                     break
+            _LOGGER.debug("closed websocket")
 
     async def login(self) -> None:
         transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth")
