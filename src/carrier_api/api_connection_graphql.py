@@ -47,7 +47,7 @@ class ApiConnectionGraphql:
     async def websocket(self, async_callback) -> None:
         await self.check_auth_expiration()
 
-        async with self.api_session.ws_connect(f"wss://realtime.infinity.iot.carrier.com/?Token={self.access_token}") as ws:
+        async with self.api_session.ws_connect(f"wss://realtime.infinity.iot.carrier.com/?Token={self.access_token}", heartbeat=55) as ws:
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:
                     if msg.data == 'close cmd':
@@ -57,6 +57,8 @@ class ApiConnectionGraphql:
                         await async_callback(msg.data)
                 elif msg.type == WSMsgType.ERROR:
                     break
+#                await ws.send_json({"action": "reconcile"})
+#                await ws.send_json({"action":"keepalive"})
             _LOGGER.debug("closed websocket")
 
     async def login(self) -> None:
