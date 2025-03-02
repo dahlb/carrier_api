@@ -1,6 +1,6 @@
 # run with "python3 src/carrier_api/stub.py"
 import logging
-from asyncio import sleep
+from asyncio import sleep, create_task
 from getpass import getpass
 from pathlib import Path
 import sys
@@ -21,6 +21,7 @@ logger.addHandler(ch)
 
 
 from src.carrier_api.api_connection_graphql import ApiConnectionGraphql
+from src.carrier_api.api_websocket_data_updater import WebsocketDataUpdater
 from src.carrier_api.const import FanModes
 
 async def main():
@@ -33,12 +34,13 @@ async def main():
         print([system.__repr__() for system in systems])
         async def listener():
             async def output(message):
-                print(message)
+                print([system.__repr__() for system in systems])
+            ws_data_updater = WebsocketDataUpdater(systems=systems)
+            api_connection.api_websocket.callback_add(ws_data_updater.message_handler)
+            api_connection.api_websocket.callback_add(output)
+            await api_connection.api_websocket.create_task_listener()
 
-            await api_connection.ws_listener(output)
-
-        loop = asyncio.get_event_loop()
-        listener = loop.create_task(listener())
+        listener = create_task(listener(), name="listener")
 
         await api_connection.set_config_manual_activity(
             system_serial=systems[0].profile.serial,

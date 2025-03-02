@@ -28,7 +28,8 @@ keywords = [
 ]
 dependencies = [
     "gql[aiohttp]",
-    "websockets>=15.0"
+    "aiohttp",
+    "deepmerge"
 ]
 
 [project.urls]

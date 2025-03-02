@@ -1,4 +1,3 @@
-import asyncio
 from datetime import datetime, timedelta
 from logging import getLogger
 from typing import Any
@@ -10,7 +9,8 @@ from gql.transport.aiohttp import AIOHTTPTransport
 from .const import (
     FanModes,
     ActivityTypes,
-    HeatSourceTypes, SystemModes,
+    HeatSourceTypes,
+    SystemModes,
 )
 from .energy import Energy
 from .profile import Profile
@@ -18,6 +18,7 @@ from .status import Status
 from .config import Config
 from .errors import AuthError
 from .system import System
+from .api_websocket import ApiWebsocket
 
 _LOGGER = getLogger(__name__)
 
@@ -27,8 +28,7 @@ class ApiConnectionGraphql:
     refresh_token: str = None
     token_type: str = None
     access_token: str = None
-    ws = None
-    ws_heartbeat = None
+    api_websocket: ApiWebsocket = None
 
     def __init__(
             self,
@@ -45,34 +45,6 @@ class ApiConnectionGraphql:
 
     async def cleanup(self) -> None:
         await self.api_session.close()
-
-    async def ws_listener(self, async_callback) -> None:
-        await self.check_auth_expiration()
-
-        async with self.api_session.ws_connect(f"wss://realtime.infinity.iot.carrier.com/?Token={self.access_token}") as self.ws:
-            loop = asyncio.get_event_loop()
-            async def ws_heartbeat() -> None:
-                while True:
-                    await self.ws.send_json({"action": "keepalive"})
-                    _LOGGER.debug("ws: kept alive")
-                    await asyncio.sleep(55)
-            self.ws_heartbeat = loop.create_task(ws_heartbeat())
-            async for msg in self.ws:
-                if msg.type == WSMsgType.TEXT:
-                    if msg.data == 'close cmd':
-                        await self.ws.close()
-                        break
-                    else:
-                        await async_callback(msg.data)
-                elif msg.type == WSMsgType.ERROR:
-                    break
-            _LOGGER.debug("ws: closed")
-            self.ws = None
-
-    async def ws_reconcile(self) -> None:
-        if self.ws is not None:
-            await self.ws.send_json({"action": "reconcile"})
-            _LOGGER.debug("ws: reconciled")
 
     async def login(self) -> None:
         transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth")
@@ -108,6 +80,8 @@ class ApiConnectionGraphql:
                 self.token_type = result["assistedLogin"]["data"]["token_type"]
                 self.access_token = result["assistedLogin"]["data"]["access_token"]
                 self.refresh_token = result["assistedLogin"]["data"]["refresh_token"]
+                if self.api_websocket is None:
+                    self.api_websocket = ApiWebsocket(self)
             else:
                 raise AuthError(result)
 
@@ -161,22 +135,10 @@ class ApiConnectionGraphql:
                     last
                     email
                     emailVerified
-                    secondaryEmail
-                    secondaryEmailVerified
-                    phone1
-                    promoEmail
-                    acceptedTermsOfServiceDateTime
-                    creationSource
                     postal
                     locations {
                         locationId
                         name
-                        street1
-                        street2
-                        city
-                        state
-                        country
-                        postal
                         systems {
                             config {
                                 zones {
@@ -198,13 +160,6 @@ class ApiConnectionGraphql:
                             thingName
                             name
                             connectionStatus
-                        }
-                        entryLevels {
-                            name
-                            serial
-                            connection {
-                                isConnected
-                            }
                         }
                     }
                 }
@@ -279,9 +234,10 @@ class ApiConnectionGraphql:
                   mode
                   cfgem
                   cfgdead
+                  cfgvent
                   cfghumid
-                  erate
-                  grate
+                  cfguv
+                  cfgfan
                   heatsource
                   vacat
                   vacstart
@@ -291,10 +247,6 @@ class ApiConnectionGraphql:
                   vacfan
                   fueltype
                   gasunit
-                  cfgvent
-                  cfghumid
-                  cfguv
-                  cfgfan
                   vacat
                   filtertype
                   filterinterval
@@ -336,20 +288,8 @@ class ApiConnectionGraphql:
                       zoneId
                       type
                       fan
-                      previousFan
                       htsp
                       clsp
-                    }
-                  }
-                  wholeHouse {
-                    hold
-                    holdActivity
-                    otmr
-                    activities {
-                      id
-                      htsp
-                      clsp
-                      fan
                     }
                   }
                   humidityAway {
@@ -457,7 +397,7 @@ class ApiConnectionGraphql:
             """
         )
         response = await self.authed_query(operation_name="updateInfinityConfig", query=query, variable_values=variables)
-        await self.ws_reconcile()
+        await self.api_websocket.send_reconcile()
         return response
 
     async def _update_infinity_zone_activity(self, variables: dict[str, Any]) -> dict[str, Any]:
@@ -471,7 +411,7 @@ class ApiConnectionGraphql:
             """
         )
         response = await self.authed_query(operation_name="updateInfinityZoneActivity", query=query, variable_values=variables)
-        await self.ws_reconcile()
+        await self.api_websocket.send_reconcile()
         return response
 
     async def _update_infinity_zone_config(self, variables: dict[str, Any]) -> dict[str, Any]:
@@ -485,7 +425,7 @@ class ApiConnectionGraphql:
             """
         )
         response = await self.authed_query(operation_name="updateInfinityZoneConfig", query=query, variable_values=variables)
-        await self.ws_reconcile()
+        await self.api_websocket.send_reconcile()
         return response
 
     async def set_config_mode(self, system_serial: str, mode: SystemModes) -> dict[str, Any]:
