@@ -47,7 +47,7 @@ class ApiConnectionGraphql:
         await self.api_session.close()
 
     async def login(self) -> None:
-        transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth")
+        transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth", ssl=True)
         async with Client(
                 transport=transport,
                 fetch_schema_from_transport=True,
@@ -110,7 +110,7 @@ class ApiConnectionGraphql:
     async def authed_query(self, operation_name: str, query: gql, variable_values: dict[str, Any]) -> dict[str, Any]:
         await self.check_auth_expiration()
         transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql",
-                                     headers={'Authorization': f"{self.token_type} {self.access_token}"})
+                                     headers={'Authorization': f"{self.token_type} {self.access_token}"}, ssl=True)
         async with Client(
                 transport=transport,
                 fetch_schema_from_transport=True,
