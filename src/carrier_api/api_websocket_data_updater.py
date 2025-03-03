@@ -1,3 +1,4 @@
+from datetime import datetime, UTC
 from json import loads
 from deepmerge import always_merger
 from logging import getLogger
@@ -46,6 +47,7 @@ class WebsocketDataUpdater:
                     stale_zone = find_by_id(system.status.raw["zones"], zone_id)
                     always_merger.merge(stale_zone, zone)
                 merged_status = always_merger.merge(system.status.raw, websocket_message_json)
+                merged_status.update({"utcTime": datetime.now(UTC).isoformat()})
                 system.status = Status(merged_status)
             case "InfinityConfig":
                 _message_id = websocket_message_json.pop("id", None)
