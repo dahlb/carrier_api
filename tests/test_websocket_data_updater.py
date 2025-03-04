@@ -1,10 +1,6 @@
-"""Tests for DeviceAws.
+"""Tests for WebsocketDataUpdater.
 
 Here is one way to run it:
-
-First install the package in developer mode
-
-    $ pip install -e .
 
 Then use pytest to drive the tests
 

@@ -3,3 +3,6 @@ gql[aiohttp]
 aiohttp
 deepmerge
 pytest
+pytest
+pytest-md
+pytest-emoji
