@@ -1,4 +1,4 @@
-name: "PyTest"
+name: "MyPy"
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
       - synchronize
 
 jobs:
-  pytest:
+  mypy:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -23,10 +23,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pytest dependencies
-        run: pip install -r requirements.txt
-      - uses: pavelzw/pytest-action@v2
-        with:
-          emoji: false
-          verbose: false
-          job-summary: true
+      - name: developer mode install  # to pull in all dependencies.
+        run: pip install -e .
+      - name: Install mypy dependencies
+        run: pip install mypy types-python-dateutil
+      - name: Runs mypy
+        run: mypy src/carrier_api --explicit-package-bases
+
