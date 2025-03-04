@@ -10,22 +10,17 @@ Then use pytest to drive the tests
 
     $ pytest tests
 """
-import logging
 from importlib import resources
 import json
-from unittest import mock
-from unittest import TestCase
 from unittest import IsolatedAsyncioTestCase
 from pathlib import Path
 import sys
 
 
-import pytest
-
 path_root = Path(__file__).parents[1]
 sys.path.append(str(path_root))
 
-from src.carrier_api import Profile, Status, Config, Energy, System, WebsocketDataUpdater, ActivityTypes
+from src.carrier_api import Profile, Status, Config, Energy, System, WebsocketDataUpdater, ActivityTypes # noqa: E402
 
 
 class WebsocketDataUpdaterTestBase(IsolatedAsyncioTestCase):
