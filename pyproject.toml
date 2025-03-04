@@ -29,7 +29,8 @@ keywords = [
 dependencies = [
     "gql[aiohttp]",
     "aiohttp",
-    "deepmerge"
+    "deepmerge",
+    "python-dateutil"
 ]
 
 [project.urls]

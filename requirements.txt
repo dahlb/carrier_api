@@ -2,8 +2,8 @@ ruff==0.9.9
 gql[aiohttp]
 aiohttp
 deepmerge
+python-dateutil
 pytest
 pytest
 pytest-md
 pytest-emoji
-python-dateutil
