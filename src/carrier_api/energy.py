@@ -35,22 +35,21 @@ class EnergyMeasurement:
 
 
 class Energy:
-    seer: float = None
-    hspf: float = None
-    cooling: bool = None
-    hp_heat: bool = None
-    fan: bool = None
-    electric_heat: bool = None
-    reheat: bool = None
-    fan_gas: bool = None
-    gas: bool = None
-    loop_pump: bool = None
-    periods: [EnergyMeasurement] = None
-    raw: dict = None
+    seer: float | None = None
+    hspf: float | None = None
+    cooling: bool | None = None
+    hp_heat: bool | None = None
+    fan: bool | None = None
+    electric_heat: bool | None = None
+    reheat: bool | None = None
+    fan_gas: bool | None = None
+    gas: bool | None = None
+    loop_pump: bool | None = None
+    periods: list[EnergyMeasurement] | None = None
 
     def __init__(
         self,
-        raw,
+        raw: dict,
     ):
         self.raw = raw
         self.seer: int = safely_get_json_value(self.raw, "energyConfig.seer", float)

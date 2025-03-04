@@ -14,8 +14,8 @@ class System:
             self,
             profile: Profile,
             status: Status,
-            config: Config = None,
-            energy: Energy = None,
+            config: Config,
+            energy: Energy,
     ):
         self.profile = profile
         self.status = status

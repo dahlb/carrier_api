@@ -1,0 +1,13 @@
+{
+   "zones":[
+      {
+         "timestamp":"2025-03-03T13:45:05.706Z",
+         "id":1,
+         "currentActivity":"home",
+         "htsp":77,
+         "clsp":79
+      }
+   ],
+   "messageType":"InfinityStatus",
+   "deviceId":"SERIALXXX"
+}

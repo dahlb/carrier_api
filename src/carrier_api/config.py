@@ -7,7 +7,7 @@ from .util import safely_get_json_value
 _LOGGER = getLogger(__name__)
 
 
-def active_schedule_periods(periods_json: [dict]):
+def active_schedule_periods(periods_json: list[dict]):
     return list(filter(lambda period: safely_get_json_value(period, "enabled") == "on", periods_json))
 
 
@@ -115,20 +115,19 @@ class ConfigZone:
 
 
 class Config:
-    temperature_unit: str = None
-    mode: str = None
-    heat_source: str = None
-    etag: str = None
-    fuel_type: str = None
-    gas_unit: str = None
-    zones: [ConfigZone] = None
-    uv_enabled: bool = None
-    humidifier_enabled: bool = None
-    raw: dict = None
+    temperature_unit: str | None = None
+    mode: str | None = None
+    heat_source: str | None = None
+    etag: str | None = None
+    fuel_type: str | None = None
+    gas_unit: str | None = None
+    zones: list[ConfigZone] | None = None
+    uv_enabled: bool | None = None
+    humidifier_enabled: bool | None = None
 
     def __init__(
         self,
-        raw,
+        raw: dict,
     ):
         self.raw = raw
         self.temperature_unit = safely_get_json_value(self.raw, "cfgem")

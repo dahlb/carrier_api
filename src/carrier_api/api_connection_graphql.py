@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
 from logging import getLogger
-from typing import Any
+from typing import Any, Literal
 
-from aiohttp import ClientSession, WSMsgType
+from aiohttp import ClientSession
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
+from graphql import DocumentNode
 
 from .const import (
     FanModes,
@@ -25,10 +26,10 @@ _LOGGER = getLogger(__name__)
 
 class ApiConnectionGraphql:
     expires_at: datetime = datetime.now()
-    refresh_token: str = None
-    token_type: str = None
-    access_token: str = None
-    api_websocket: ApiWebsocket = None
+    refresh_token: str | None = None
+    token_type: str | None = None
+    access_token: str | None = None
+    api_websocket: ApiWebsocket | None = None
 
     def __init__(
             self,
@@ -107,7 +108,7 @@ class ApiConnectionGraphql:
         self.access_token = data["access_token"]
         self.refresh_token = data["refresh_token"]
 
-    async def authed_query(self, operation_name: str, query: gql, variable_values: dict[str, Any]) -> dict[str, Any]:
+    async def authed_query(self, operation_name: str, query: DocumentNode, variable_values: dict[str, Any]) -> dict[str, Any]:
         await self.check_auth_expiration()
         transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql",
                                      headers={'Authorization': f"{self.token_type} {self.access_token}"}, ssl=True)
@@ -397,7 +398,10 @@ class ApiConnectionGraphql:
             """
         )
         response = await self.authed_query(operation_name="updateInfinityConfig", query=query, variable_values=variables)
-        await self.api_websocket.send_reconcile()
+        if self.api_websocket is not None:
+            await self.api_websocket.send_reconcile()
+        else:
+            _LOGGER.warning("No API websocket connection")
         return response
 
     async def _update_infinity_zone_activity(self, variables: dict[str, Any]) -> dict[str, Any]:
@@ -411,7 +415,10 @@ class ApiConnectionGraphql:
             """
         )
         response = await self.authed_query(operation_name="updateInfinityZoneActivity", query=query, variable_values=variables)
-        await self.api_websocket.send_reconcile()
+        if self.api_websocket is not None:
+            await self.api_websocket.send_reconcile()
+        else:
+            _LOGGER.warning("No API websocket connection")
         return response
 
     async def _update_infinity_zone_config(self, variables: dict[str, Any]) -> dict[str, Any]:
@@ -425,7 +432,10 @@ class ApiConnectionGraphql:
             """
         )
         response = await self.authed_query(operation_name="updateInfinityZoneConfig", query=query, variable_values=variables)
-        await self.api_websocket.send_reconcile()
+        if self.api_websocket is not None:
+            await self.api_websocket.send_reconcile()
+        else:
+            _LOGGER.warning("No API websocket connection")
         return response
 
     async def set_config_mode(self, system_serial: str, mode: SystemModes) -> dict[str, Any]:
@@ -450,8 +460,14 @@ class ApiConnectionGraphql:
         }
         return await self._update_infinity_config(variables)
 
-    async def set_humidifier(self, system_serial: str, humidifier_on: bool = None, over_cooling: bool = None, cooling_percent: 5|10|15|20|25|30|35|40|45 = None, heating_percent: 5|10|15|20|25|30|35|40|45 = None) -> dict[str, Any]:
-        variables = {
+    async def set_humidifier(self, system_serial: str, humidifier_on: bool | None = None,
+                             over_cooling: bool | None = None,
+                             cooling_percent: Literal[5] | Literal[10] | Literal[15] | Literal[20] | Literal[25] |
+                                              Literal[30] | Literal[35] | Literal[40] | Literal[45] | None = None,
+                             heating_percent: Literal[5] | Literal[10] | Literal[15] | Literal[20] | Literal[25] |
+                                              Literal[30] | Literal[35] | Literal[40] | Literal[45] | None = None
+                             ) -> dict[str, Any]:
+        variables: dict[str, Any] = {
             "input": {
                 "serial": system_serial,
                 "humidityHome": {
@@ -460,6 +476,7 @@ class ApiConnectionGraphql:
                 }
             }
         }
+
         if humidifier_on is not None and humidifier_on is False:
             variables["input"]["humidityHome"] = {
                 "humid": "off",
@@ -493,7 +510,7 @@ class ApiConnectionGraphql:
         system_serial: str,
         zone_id: str,
         activity_type: ActivityTypes,
-        hold_until: str = None,
+        hold_until: str | None = None,
     ):
         if activity_type not in ActivityTypes:
             raise ValueError(f"{activity_type} is not a valid activity type")
@@ -526,7 +543,7 @@ class ApiConnectionGraphql:
         zone_id: str,
         heat_set_point: str,
         cool_set_point: str,
-        fan_mode: FanModes = None,
+        fan_mode: FanModes | None = None,
     ):
         variables = {
             "input": {

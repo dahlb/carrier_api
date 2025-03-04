@@ -1,0 +1,8 @@
+{
+   "timestamp":"2025-03-03T02:42:10.153Z",
+   "odu":{
+      "opmode":"off"
+   },
+   "messageType":"InfinityStatus",
+   "deviceId":"SERIALXXX"
+}

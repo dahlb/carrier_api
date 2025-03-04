@@ -32,6 +32,7 @@ class StatusZone:
                 return SystemModes.COOL
             case "idle":
                 return SystemModes.OFF
+        raise ValueError(f"Unknown conditioning: {self.conditioning}")
 
     def __repr__(self):
         return {
@@ -54,26 +55,25 @@ class StatusZone:
 
 
 class Status:
-    outdoor_temperature: int = None
-    mode: str = None
-    temperature_unit: str = None
-    filter_used: int = None
-    is_disconnected: bool = None
-    airflow_cfm: int = None
-    blower_rpm: int = None
-    static_pressure: float = None
-    humidity_level: int = None
-    humidifier_on: bool = None
-    uv_lamp_level: int = None
-    outdoor_unit_operational_status: str = None
-    indoor_unit_operational_status: str = None
-    time_stamp: datetime = None
-    zones: [StatusZone] = None
-    raw: dict = None
+    outdoor_temperature: int | None = None
+    mode: str | None = None
+    temperature_unit: TemperatureUnits | None = None
+    filter_used: int | None = None
+    is_disconnected: bool | None = None
+    airflow_cfm: int | None = None
+    blower_rpm: int | None = None
+    static_pressure: float | None = None
+    humidity_level: int | None = None
+    humidifier_on: bool | None = None
+    uv_lamp_level: int | None = None
+    outdoor_unit_operational_status: str | None = None
+    indoor_unit_operational_status: str | None = None
+    time_stamp: datetime | None = None
+    zones: list[StatusZone] | None = None
 
     def __init__(
         self,
-        raw,
+        raw: dict,
     ):
         self.raw = raw
         self.outdoor_temperature: float = safely_get_json_value(self.raw, "oat", float)
@@ -103,6 +103,7 @@ class Status:
                 return SystemModes.HEAT
             case "dehumidify":
                 return SystemModes.COOL
+        raise ValueError(f"Unknown mode: {self.mode}")
 
     def __repr__(self):
         return {

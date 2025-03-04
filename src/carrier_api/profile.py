@@ -5,19 +5,16 @@ _LOGGER = getLogger(__name__)
 
 
 class Profile:
-    name: str = None
-    serial: str = None
-    model: str = None
-    brand: str = None
-    firmware: str = None
-    indoor_model: str = None
-    indoor_serial: str = None
-    indoor_unit_type: str = None
-    indoor_unit_source: str = None
-    outdoor_model: str = None
-    outdoor_serial: str = None
-    outdoor_unit_type: str = None
-    raw: dict = None
+    model: str | None = None
+    brand: str | None = None
+    firmware: str | None = None
+    indoor_model: str | None = None
+    indoor_serial: str | None = None
+    indoor_unit_type: str | None = None
+    indoor_unit_source: str | None = None
+    outdoor_model: str | None = None
+    outdoor_serial: str | None = None
+    outdoor_unit_type: str | None = None
 
     def __init__(
         self,

@@ -1,0 +1,11 @@
+{
+   "zones":[
+      {
+         "timestamp":"2025-03-03T02:42:10.151Z",
+         "id":1,
+         "zoneconditioning":"idle"
+      }
+   ],
+   "messageType":"InfinityStatus",
+   "deviceId":"SERIALXXX"
+}

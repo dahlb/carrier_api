@@ -1,15 +1,16 @@
 from asyncio import sleep, create_task, CancelledError, get_event_loop
 from logging import getLogger
+from typing import Callable
 
-from aiohttp import WSMsgType
+from aiohttp import WSMsgType, ClientWebSocketResponse
 
 _LOGGER = getLogger(__name__)
 
 
 class ApiWebsocket:
-    websocket = None
+    websocket: ClientWebSocketResponse | None = None
     running = None
-    async_callbacks = []
+    async_callbacks: list[Callable] = []
     task_heartbeat = None
     task_listener = None
 
@@ -28,7 +29,8 @@ class ApiWebsocket:
 
     async def loop_heartbeat(self) -> None:
         while True:
-            await self.websocket.send_json({"action": "keepalive"})
+            if self.websocket is not None:
+                await self.websocket.send_json({"action": "keepalive"})
             _LOGGER.debug("ws: kept alive")
             await sleep(55)
 
@@ -40,16 +42,17 @@ class ApiWebsocket:
         async with self.api_connection_graphql.api_session.ws_connect(
                 f"wss://realtime.infinity.iot.carrier.com/?Token={self.api_connection_graphql.access_token}") as self.websocket:
             await self.create_task_heartbeat()
-            async for msg in self.websocket:
-                if msg.type == WSMsgType.TEXT:
-                    if msg.data == 'close cmd':
-                        await self.websocket.close()
+            if self.websocket is not None:
+                async for msg in self.websocket:
+                    if msg.type == WSMsgType.TEXT:
+                        if msg.data == 'close cmd':
+                            await self.websocket.close()
+                            break
+                        else:
+                            for async_callback in self.async_callbacks:
+                                await async_callback(msg.data)
+                    elif msg.type == WSMsgType.ERROR:
                         break
-                    else:
-                        for async_callback in self.async_callbacks:
-                            await async_callback(msg.data)
-                elif msg.type == WSMsgType.ERROR:
-                    break
             _LOGGER.debug("ws: closed")
             self.websocket = None
 

@@ -1,0 +1,8 @@
+{
+   "timestamp":"2025-03-03T02:44:33.229Z",
+   "idu":{
+      "cfm":525
+   },
+   "messageType":"InfinityStatus",
+   "deviceId":"SERIALXXX"
+}

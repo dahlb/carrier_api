@@ -9,10 +9,11 @@ from .config import Config
 _LOGGER = getLogger(__name__)
 
 
-def find_by_id(collection: list[dict], id: int) -> dict:
+def find_by_id(collection: list[dict], id: str) -> dict:
     for item in collection:
-        if item['id'] == id:
+        if str(item['id']) == str(id):
             return item
+    raise ValueError("id: %s not found in list: %s", id, collection)
 
 
 class WebsocketDataUpdater:
@@ -26,6 +27,7 @@ class WebsocketDataUpdater:
         for system in self.systems:
             if system.profile.serial == serial_id:
                 return system
+        raise ValueError("No carrier_system found for serial %s", serial_id)
 
     async def message_handler(self, websocket_message: str) -> None:
         websocket_message_json = loads(websocket_message)
@@ -35,7 +37,6 @@ class WebsocketDataUpdater:
         _updated_time = websocket_message_json.pop("updatedTime", None)
         system = self.carrier_system(serial_id=serial_id)
         if system is None:
-            _LOGGER.warning("No carrier_system found for serial %s", serial_id)
             return
         match message_type:
             case "InfinityStatus":
