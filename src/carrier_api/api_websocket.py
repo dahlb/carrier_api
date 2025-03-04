@@ -1,6 +1,6 @@
 from asyncio import sleep, create_task, CancelledError, get_event_loop
 from logging import getLogger
-from typing import Callable
+from collections.abc import Callable
 
 from aiohttp import WSMsgType, ClientWebSocketResponse
 
