@@ -6,3 +6,4 @@ pytest
 pytest
 pytest-md
 pytest-emoji
+python-dateutil
