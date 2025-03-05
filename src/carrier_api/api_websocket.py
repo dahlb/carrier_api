@@ -28,10 +28,18 @@ class ApiWebsocket:
         self.async_callbacks.remove(async_callback)
 
     async def loop_heartbeat(self) -> None:
-        while True:
-            if self.websocket is not None:
-                await self.websocket.send_json({"action": "keepalive"})
-            _LOGGER.debug("ws: kept alive")
+        running = True
+        while running:
+            try:
+                if self.websocket is not None:
+                    await self.websocket.send_json({"action": "keepalive"})
+                    _LOGGER.debug("ws: kept alive")
+                else:
+                    _LOGGER.debug("ws: keep alive skipped as no socket available")
+            except CancelledError:
+                running = False
+            except Exception as error:
+                _LOGGER.exception("ws heartbeat error", exc_info=error)
             await sleep(55)
 
     async def create_task_heartbeat(self) -> None:
