@@ -34,7 +34,7 @@ class ConfigZoneActivity:
 
 class ConfigZone:
     def __init__(self, zone_json: dict, vacation_json: dict):
-        self.api_id = safely_get_json_value(zone_json, "id")
+        self.api_id = safely_get_json_value(zone_json, "id", str)
         self.name: str = safely_get_json_value(zone_json, "name")
         self.hold_activity: ActivityTypes = safely_get_json_value(zone_json, "holdActivity", ActivityTypes)
         self.hold: bool = safely_get_json_value(zone_json, "hold") == "on"
