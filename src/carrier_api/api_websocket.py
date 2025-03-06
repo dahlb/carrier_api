@@ -64,7 +64,8 @@ class ApiWebsocket:
                         break
             _LOGGER.debug("ws: closed")
             self.websocket = None
-            self.task_heartbeat.cancel()
+            if self.task_heartbeat is not None:
+                self.task_heartbeat.cancel()
             self.task_heartbeat = None
 
     async def loop_listener(self) -> None:
