@@ -1,3 +1,4 @@
+import asyncio
 from asyncio import sleep, create_task, CancelledError, get_event_loop, current_task
 from logging import getLogger
 from collections.abc import Callable
@@ -28,14 +29,18 @@ class ApiWebsocket:
         self.async_callbacks.remove(async_callback)
 
     async def loop_heartbeat(self) -> None:
+        task_name = "unknown"
+        current_task_instance = current_task()
+        if current_task_instance is not None:
+            task_name = current_task_instance.get_name()
         running = True
         while running:
             try:
                 if self.websocket is not None:
                     await self.websocket.send_json({"action": "keepalive"})
-                    _LOGGER.debug(f"ws: kept alive in {current_task().get_name()}")
+                    _LOGGER.debug(f"ws: kept alive in {task_name}")
                 else:
-                    _LOGGER.debug(f"ws: keep alive skipped as no socket available in {current_task().get_name()}")
+                    _LOGGER.debug(f"ws: keep alive skipped as no socket available in {task_name}")
             except CancelledError:
                 running = False
             except Exception as error:
