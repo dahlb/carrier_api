@@ -49,7 +49,8 @@ class ApiWebsocket:
         await self.api_connection_graphql.check_auth_expiration()
         async with self.api_connection_graphql.api_session.ws_connect(
                 f"wss://realtime.infinity.iot.carrier.com/?Token={self.api_connection_graphql.access_token}") as self.websocket:
-            await self.create_task_heartbeat()
+            if self.task_heartbeat is None:
+                await self.create_task_heartbeat()
             if self.websocket is not None:
                 async for msg in self.websocket:
                     if msg.type == WSMsgType.TEXT:
@@ -63,6 +64,8 @@ class ApiWebsocket:
                         break
             _LOGGER.debug("ws: closed")
             self.websocket = None
+            self.task_heartbeat.cancel()
+            self.task_heartbeat = None
 
     async def loop_listener(self) -> None:
         self.running = True
