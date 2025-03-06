@@ -2,6 +2,7 @@ import asyncio
 from asyncio import sleep, create_task, CancelledError, get_event_loop, current_task
 from logging import getLogger
 from collections.abc import Callable
+from random import random
 
 from aiohttp import WSMsgType, ClientWebSocketResponse
 
@@ -48,7 +49,7 @@ class ApiWebsocket:
             await sleep(55)
 
     async def create_task_heartbeat(self) -> None:
-        self.task_heartbeat = get_event_loop().create_task(self.loop_heartbeat(), name="carrier_api_ws_heartbeat")
+        self.task_heartbeat = get_event_loop().create_task(self.loop_heartbeat(), name=f"carrier_api_ws_heartbeat:{random()}")
 
     async def listener(self) -> None:
         await self.api_connection_graphql.check_auth_expiration()
