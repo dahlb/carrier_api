@@ -51,7 +51,7 @@ class ApiConnectionGraphql:
         transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth", ssl=True)
         async with Client(
                 transport=transport,
-                fetch_schema_from_transport=True,
+                fetch_schema_from_transport=False,
         ) as session:
             query = gql(
                 """
@@ -114,7 +114,7 @@ class ApiConnectionGraphql:
                                      headers={'Authorization': f"{self.token_type} {self.access_token}"}, ssl=True)
         async with Client(
                 transport=transport,
-                fetch_schema_from_transport=True,
+                fetch_schema_from_transport=False,
         ) as session:
             return await session.execute(query, variable_values=variable_values, operation_name=operation_name)
 
