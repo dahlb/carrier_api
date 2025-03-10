@@ -269,6 +269,7 @@ class ApiConnectionGraphql:
                     hold
                     holdActivity
                     otmr
+                    occEnabled
                     program {
                       id
                       day {

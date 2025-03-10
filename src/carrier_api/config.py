@@ -40,6 +40,7 @@ class ConfigZone:
         self.hold: bool = safely_get_json_value(zone_json, "hold") == "on"
         self.hold_until: str = safely_get_json_value(zone_json, "otmr")
         self.program_json: dict = safely_get_json_value(zone_json, "program")
+        self.occupancy_enabled: bool = safely_get_json_value(zone_json, "occEnabled") == "on"
         self.activities = []
         for zone_activity_json in safely_get_json_value(zone_json, "activities"):
             self.activities.append(
