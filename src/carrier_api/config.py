@@ -105,6 +105,7 @@ class ConfigZone:
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,
+            "occupancy_enabled": self.occupancy_enabled,
             "activities": [activity.__repr__() for activity in self.activities],
         }
         if self.hold_activity is not None:
