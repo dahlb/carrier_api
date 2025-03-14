@@ -46,7 +46,7 @@ class WebsocketDataUpdater:
                     _timestamp = zone.pop("timestamp", None)
                     # rt work around due to bug in the websocket api https://github.com/dahlb/ha_carrier/issues/214
                     # and htsp/clsp https://github.com/dahlb/ha_carrier/issues/217
-                    if "rt" in zone or "htsp" in zone or "clsp" in zone:
+                    if ("rt" in zone or "htsp" in zone or "clsp" in zone) and "currentActivity" not in zone:
                         _LOGGER.debug("Received RT/HTSP/CLSP: zone_id %s changing to %s", zone['id'], zone['id']-1)
                         zone['id'] = zone['id'] - 1
                     stale_zone = find_by_id(system.status.raw["zones"], zone['id'])
@@ -61,34 +61,18 @@ class WebsocketDataUpdater:
                 zones = websocket_message_json.pop('zones', [])
                 for zone in zones:
                     _timestamp = zone.pop("timestamp", None)
-                    zone_id = zone['id']
-                    stale_zone = find_by_id(system.config.raw["zones"], zone_id)
-                    activities = zone.pop('activities', [])
-                    for activity in activities:
-                        _timestamp = activity.pop("timestamp", None)
-                        _zone_configuration_id = activity.pop("zoneConfigurationId", None)
-                        _fan_setting_id = activity.pop("fanSettingId", None)
-                        stale_activity = find_by_id(stale_zone["activities"], activity["id"])
-                        if stale_activity is not None:
-                            always_merger.merge(stale_activity, activity)
-                    program = zone.pop('program', None)
-                    if program is not None:
-                        stale_program = stale_zone["program"]
-                        for day in program["day"]:
-                            for period in day["periods"]:
-                                _timestamp = period.pop("timestamp", None)
-                                _zone_configuration_id = period.pop("zoneConfigurationId", None)
-                                _fan_setting_id = period.pop("fanSettingId", None)
-                                _day_of_week_index = period.pop("dayOfWeekIndex", None)
-                                period_id = period.pop("id", None)
-                                day_id = period.pop("dayId", None)
-                                stale_day = find_by_id(stale_program["days"], day_id)
-                                if stale_day is not None:
-                                    stale_period = None
-                                    find_by_id(stale_day["period"], period_id)
-                                    if stale_period is not None:
-                                        always_merger.merge(stale_period, period)
-                    always_merger.merge(stale_zone, zone)
+                    if "id" in zone:
+                        zone_id = zone['id']
+                        stale_zone = find_by_id(system.config.raw["zones"], zone_id)
+                        activities = zone.pop('activities', [])
+                        for activity in activities:
+                            _timestamp = activity.pop("timestamp", None)
+                            _zone_configuration_id = activity.pop("zoneConfigurationId", None)
+                            _fan_setting_id = activity.pop("fanSettingId", None)
+                            stale_activity = find_by_id(stale_zone["activities"], activity["id"])
+                            if stale_activity is not None:
+                                always_merger.merge(stale_activity, activity)
+                        always_merger.merge(stale_zone, zone)
                 always_merger.merge(system.config.raw, websocket_message_json)
                 system.config = Config(system.config.raw)
             case _:

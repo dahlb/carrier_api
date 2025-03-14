@@ -1,0 +1,19 @@
+{
+   "zones":[
+      {
+         "program":{
+            "day":[
+               {
+                  "timestamp":"2025-03-14T01:06:43.859Z",
+                  "zoneConfigurationId":"1",
+                  "dayOfWeekIndex":4,
+                  "zoneId":"1",
+                  "id":"4"
+               }
+            ]
+         }
+      }
+   ],
+   "messageType":"InfinityConfig",
+   "deviceId":"SERIALXXX"
+}

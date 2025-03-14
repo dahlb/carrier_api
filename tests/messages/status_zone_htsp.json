@@ -1,0 +1,12 @@
+{
+   "messageType":"InfinityStatus",
+   "deviceId":"SERIALXXX",
+   "zones":[
+      {
+         "id":2,
+         "htsp":72,
+         "clsp":85
+      }
+   ],
+   "timestamp":"2025-03-14T01:03:11.655Z"
+}
