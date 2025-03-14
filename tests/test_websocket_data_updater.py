@@ -117,7 +117,7 @@ class MessageConfigZoneHold(WebsocketDataUpdaterTestBase):
     websocket_message_path = 'messages/config_zone_hold.json'
 
     async def test_message_handler(self):
-        assert self.carrier_system.config.zones[0].hold_activity == None
+        assert self.carrier_system.config.zones[0].hold_activity is None
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.config.zones[0].hold_activity == ActivityTypes.MANUAL
         reprocessed_config = Config(raw=self.carrier_system.config.raw)
