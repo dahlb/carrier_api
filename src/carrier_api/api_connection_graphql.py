@@ -398,6 +398,7 @@ class ApiConnectionGraphql:
             }
             """
         )
+        _LOGGER.debug(f"updateInfinityConfig: {variables}")
         response = await self.authed_query(operation_name="updateInfinityConfig", query=query, variable_values=variables)
         if self.api_websocket is not None:
             await self.api_websocket.send_reconcile()
@@ -415,6 +416,7 @@ class ApiConnectionGraphql:
             }
             """
         )
+        _LOGGER.debug(f"updateInfinityZoneActivity: {variables}")
         response = await self.authed_query(operation_name="updateInfinityZoneActivity", query=query, variable_values=variables)
         if self.api_websocket is not None:
             await self.api_websocket.send_reconcile()
@@ -432,6 +434,7 @@ class ApiConnectionGraphql:
             }
             """
         )
+        _LOGGER.debug(f"updateInfinityZoneConfig: {variables}")
         response = await self.authed_query(operation_name="updateInfinityZoneConfig", query=query, variable_values=variables)
         if self.api_websocket is not None:
             await self.api_websocket.send_reconcile()
