@@ -46,7 +46,8 @@ class ConfigZone:
             self.activities.append(
                 ConfigZoneActivity(zone_activity_json=zone_activity_json)
             )
-        self.activities.append(ConfigZoneActivity(zone_activity_json=vacation_json))
+        if vacation_json["fan"] is not None:
+            self.activities.append(ConfigZoneActivity(zone_activity_json=vacation_json))
 
     def find_activity(self, activity_name: ActivityTypes):
         for activity in self.activities:
