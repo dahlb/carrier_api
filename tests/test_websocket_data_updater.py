@@ -16,7 +16,7 @@ import sys
 path_root = Path(__file__).parents[1]
 sys.path.append(str(path_root))
 
-from src.carrier_api import Profile, Status, Config, Energy, System, WebsocketDataUpdater, ActivityTypes # noqa: E402
+from src.carrier_api import Profile, Status, Config, Energy, System, WebsocketDataUpdater, ActivityTypes, FanModes # noqa: E402
 
 
 class WebsocketDataUpdaterTestBase(IsolatedAsyncioTestCase):
@@ -88,6 +88,20 @@ class MessageStatusZoneActivity(WebsocketDataUpdaterTestBase):
         assert reprocessed_status.zones[0].current_activity == ActivityTypes.HOME
         assert reprocessed_status.zones[0].heat_set_point == 77
         assert reprocessed_status.zones[0].cool_set_point == 79
+
+
+class MessageStatusZoneActivityOnly(WebsocketDataUpdaterTestBase):
+    websocket_message_path = 'messages/status_zone_activity_only.json'
+
+    async def test_message_handler(self):
+        assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
+        assert self.carrier_system.status.zones[0].fan == FanModes.MED
+        await self.data_updater.message_handler(self.websocket_message_str)
+        assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.SLEEP
+        assert self.carrier_system.status.zones[0].fan == FanModes.MED
+        reprocessed_status = Status(raw=self.carrier_system.status.raw)
+        assert reprocessed_status.zones[0].current_activity == ActivityTypes.SLEEP
+        assert self.carrier_system.status.zones[0].fan == FanModes.MED
 
 
 class MessageStatusZoneHold(WebsocketDataUpdaterTestBase):

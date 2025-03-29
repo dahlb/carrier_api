@@ -1,0 +1,12 @@
+{
+   "messageType":"InfinityStatus",
+   "deviceId":"SERIALXXX",
+   "zones":[
+      {
+         "id":2,
+         "currentActivity":"sleep",
+         "fan":"med"
+      }
+   ],
+   "timestamp":"2025-03-29T00:54:56.586Z"
+}

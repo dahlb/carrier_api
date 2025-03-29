@@ -46,8 +46,8 @@ class WebsocketDataUpdater:
                     _timestamp = zone.pop("timestamp", None)
                     # rt work around due to bug in the websocket api https://github.com/dahlb/ha_carrier/issues/214
                     # and htsp/clsp https://github.com/dahlb/ha_carrier/issues/217
-                    if "rt" in zone or "htsp" in zone or "clsp" in zone:
-                        _LOGGER.debug("Received RT/HTSP/CLSP: zone_id %s changing to %s", zone['id'], zone['id']-1)
+                    if "rt" in zone or "htsp" in zone or "clsp" in zone or "currentActivity" in zone or "fan" in zone:
+                        _LOGGER.debug("Received RT/HTSP/CLSP/CURRENTACTIVITY: zone_id %s changing to %s", zone['id'], zone['id']-1)
                         zone['id'] = zone['id'] - 1
                     stale_zone = find_by_id(system.status.raw["zones"], zone['id'])
                     always_merger.merge(stale_zone, zone)
