@@ -3,7 +3,7 @@
    "deviceId":"SERIALXXX",
    "zones":[
       {
-         "id":2,
+         "id":1,
          "currentActivity":"sleep",
          "fan":"med"
       }
