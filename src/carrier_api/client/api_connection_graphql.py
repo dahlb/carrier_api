@@ -7,19 +7,8 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from graphql import DocumentNode
 
-from .const import (
-    FanModes,
-    ActivityTypes,
-    HeatSourceTypes,
-    SystemModes,
-)
-from .energy import Energy
-from .profile import Profile
-from .status import Status
-from .config import Config
-from .errors import AuthError
-from .system import System
 from .api_websocket import ApiWebsocket
+from .. import AuthError, Systems, InfinityEnergy, SystemModes, HeatSourceTypes, ActivityTypes, FanModes
 
 _LOGGER = getLogger(__name__)
 
@@ -376,16 +365,13 @@ class ApiConnectionGraphql:
         variable_values = {"serial": system_serial}
         return await self.authed_query(operation_name=operation_name, query=query, variable_values=variable_values)
 
-    async def load_data(self) -> list[System]:
-        system_response = await self.get_systems()
-        systems = []
-        for system_response in system_response["infinitySystems"]:
-            profile = Profile(raw=system_response["profile"])
-            status = Status(raw=system_response["status"])
-            config = Config(raw=system_response["config"])
-            energy_response = await self.get_energy(profile.serial)
-            energy = Energy(raw=energy_response["infinityEnergy"])
-            systems.append(System(profile=profile, status=status, config=config, energy=energy))
+    async def load_data(self) -> Systems:
+        systems_response = await self.get_systems()
+        systems = Systems.from_dict(systems_response)
+        for system in systems.systems:
+            energy_response = await self.get_energy(system.profile.serial)
+            energy = InfinityEnergy.from_dict(energy_response["infinityEnergy"])
+            system.energy = energy
         return systems
 
     async def _update_infinity_config(self, variables: dict[str, Any]) -> dict[str, Any]:

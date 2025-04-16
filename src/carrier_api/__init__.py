@@ -1,10 +1,11 @@
 from .errors import BaseError, AuthError
-from .const import FanModes, ActivityTypes, SystemModes, TemperatureUnits
-from .api_connection_graphql import ApiConnectionGraphql
-from .config import Config, ConfigZone, ConfigZoneActivity
-from .profile import Profile
-from .status import Status, StatusZone
-from .system import System
-from .energy import Energy
-from .api_websocket_data_updater import WebsocketDataUpdater
-from .api_websocket import ApiWebsocket
+from .const import FanModes, ActivityTypes, SystemModes, TemperatureUnits, HeatSourceTypes
+from .schema.profile import Profile
+from .schema.status import Status, StatusZone
+from .schema.config import Config, ConfigZone, ConfigZoneActivity
+from .schema.energy import InfinityEnergy, EnergyConfig, EnergyConfigOptions, EnergyMeasurement
+from .schema.system import System
+from .schema.systems import Systems
+from .client import ApiConnectionGraphql
+from .client import ApiWebsocket
+from .client import WebsocketDataUpdater

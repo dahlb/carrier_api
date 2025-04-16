@@ -16,29 +16,27 @@ import sys
 path_root = Path(__file__).parents[1]
 sys.path.append(str(path_root))
 
-from src.carrier_api import Profile, Status, Config, Energy, System, WebsocketDataUpdater, ActivityTypes, FanModes # noqa: E402
+from src.carrier_api import Profile, Status, Config, InfinityEnergy, System, Systems, WebsocketDataUpdater, ActivityTypes, FanModes # noqa: E402
 
 
 class WebsocketDataUpdaterTestBase(IsolatedAsyncioTestCase):
     def setUp(self):
-        self.system_response = json.loads(open(resources.files().joinpath('graphql/systems.json')).read())
+        self.systems_response = json.loads(open(resources.files().joinpath('graphql/systems.json')).read())
         energy_response = json.loads(open(resources.files().joinpath('graphql/energy.json')).read())
-        systems = []
-        for system_response in self.system_response["infinitySystems"]:
-            profile = Profile(raw=system_response["profile"])
-            status = Status(raw=system_response["status"])
-            config = Config(raw=system_response["config"])
-            energy = Energy(raw=energy_response["infinityEnergy"])
-            systems.append(System(profile=profile, status=status, config=config, energy=energy))
+        System.from_dict(self.systems_response["infinitySystems"][0])
+        systems = Systems.from_dict(self.systems_response)
+        for system in systems.systems:
+            energy = InfinityEnergy.from_dict(energy_response["infinityEnergy"])
+            system.energy = energy
         self.data_updater = WebsocketDataUpdater(systems)
         self.websocket_message_str = open(resources.files().joinpath(self.websocket_message_path)).read()
-        self.carrier_system = systems[0]
+        self.carrier_system = systems.systems[0]
 
 class MessageStatusIduCfm(WebsocketDataUpdaterTestBase):
     websocket_message_path = 'messages/status_idu_cfm.json'
 
     async def test_setup(self):
-        assert self.carrier_system.status.raw == self.system_response["infinitySystems"][0]["status"]
+        assert self.carrier_system.status.to_dict() == self.systems_response["infinitySystems"][0]["status"]
 
     async def test_message_handler(self):
         assert self.carrier_system.status.airflow_cfm == 1239
