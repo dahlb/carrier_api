@@ -1,50 +1,33 @@
 from dataclasses import dataclass
 from datetime import datetime, time
 from logging import getLogger
-from typing import Annotated, Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List
+from marshmallow import Schema, EXCLUDE, fields, post_load, pre_load
 
-from mashumaro.types import Alias
-
-from . import _BaseModel
+from . import BaseSchema
+from .boolean import BooleanWithSerialize
 from .. import ActivityTypes, FanModes, SystemModes, TemperatureUnits
 
 _LOGGER = getLogger(__name__)
 
 
 @dataclass(kw_only=True)
-class StatusZone(_BaseModel):
-    api_id: Annotated[str, Alias("id")]
-    _enabled: Annotated[str, Alias("enabled")] = "on"
-    current_activity: Annotated[ActivityTypes, Alias("currentActivity")]
-    temperature: Annotated[float, Alias("rt")]
-    humidity: Annotated[int, Alias("rh")]
-    occupancy: Optional[bool] | None
-    fan: Annotated[FanModes, Alias("fan")]
+class StatusZone:
+    api_id: str
+#    enabled: str
+#    current_activity: ActivityTypes
+    temperature: float
+    humidity: int
+    occupancy: Optional[bool] = None
+#    fan: FanModes
     hold: bool
-    hold_until: Annotated[Optional[time], Alias("otmr")]
-    heat_set_point: Annotated[float, Alias("htsp")]
-    cool_set_point: Annotated[float, Alias("clsp")]
-    conditioning: Annotated[str, Alias("zoneconditioning")]
-
-    @classmethod
-    def __pre_deserialize__(cls, d: Dict[Any, Any]) -> Dict[Any, Any]:
-        d["occupancy"] = d.get("occupancy", None) == "occupied"
-        d["hold"] = d["hold"] == "on"
-        return d
-
-    def __post_serialize__(self, d: Dict, context: Optional[Dict] = None):
-        if d["occupancy"]:
-            d["occupancy"] = "occupied"
-        else:
-            d["occupancy"] = "unoccupied"
-        if d["hold"]:
-            d["hold"] = "on"
-        else:
-            d["hold"] = "off"
-        return d
+#    hold_until: Optional[time] = None
+#    heat_set_point: float
+#    cool_set_point: float
+#    conditioning: str
 
     @property
-    def zone_conditioning_const(self) -> SystemModes:
+    def zone_conditioning_system_mode(self) -> SystemModes:
         match self.conditioning:
             case "active_heat" | "prep_heat" | "pending_heat":
                 return SystemModes.HEAT
@@ -55,49 +38,108 @@ class StatusZone(_BaseModel):
         raise ValueError(f"Unknown conditioning: {self.conditioning}")
 
 
-@dataclass(kw_only=True)
-class InDoorUnit(_BaseModel):
-    airflow_cfm: Annotated[int, Alias("cfm")]
-    blower_rpm: Annotated[int, Alias("blwrpm")]
-    static_pressure: Annotated[float, Alias("statpress")]
-    operational_status: Annotated[str, Alias("opstat")]
-    type: Annotated[str, Alias("type")]
+class StatusZoneSchema(BaseSchema):
+    class Meta:
+        unknown = EXCLUDE
+    api_id = fields.String(data_key="id")
+    enabled = fields.String(data_key="enabled", dump_default="on")
+    current_activity = fields.Enum(ActivityTypes, by_value=True, data_key="currentActivity")
+    temperature = fields.Float(data_key="rt")
+    humidity = fields.Integer(data_key="rh")
+    occupancy = BooleanWithSerialize(truthy=["occupied"], falsy=["unoccupied"])
+    fan = fields.Enum(FanModes, by_value=True)
+    hold = BooleanWithSerialize(truthy=["on"], falsy=["off"])
+    hold_until = fields.Time(data_key="otmr")
+    heat_set_point = fields.Float(data_key="htsp")
+    cool_set_point = fields.Float(data_key="clsp")
+    conditioning = fields.String(data_key="zoneconditioning")
+
+    @post_load
+    def make(self, data, **kwargs):
+        return StatusZone(**data)
 
 
 @dataclass(kw_only=True)
-class OutDoorUnit(_BaseModel):
-    operational_status: Annotated[str, Alias("opstat")]
-    type: Annotated[str, Alias("type")]
+class InDoorUnit:
+    airflow_cfm: int
+    blower_rpm: int
+    static_pressure: float
+    operational_status: str
+    type: str
+
+
+class InDoorUnitSchema(BaseSchema):
+    class Meta:
+        unknown = EXCLUDE
+    airflow_cfm = fields.Integer(data_key="cfm")
+    blower_rpm = fields.Integer(data_key="blwrpm")
+    static_pressure = fields.Float(data_key="statpress")
+    operational_status = fields.String(data_key="opstat")
+    type = fields.String()
+
+    @post_load
+    def make(self, data, **kwargs):
+        return InDoorUnit(**data)
 
 
 @dataclass(kw_only=True)
-class Status(_BaseModel):
-    outdoor_temperature: Annotated[float, Alias("oat")]
+class OutDoorUnit:
+    operational_status: str
+    type: str
+
+
+class OutDoorUnitSchema(BaseSchema):
+    class Meta:
+        unknown = EXCLUDE
+    operational_status = fields.String(data_key="opstat")
+    type = fields.String()
+
+    @post_load
+    def make(self, data, **kwargs):
+        return OutDoorUnit(**data)
+
+
+@dataclass(kw_only=True)
+class Status:
+    outdoor_temperature: float
     mode: str
-    temperature_unit: Annotated[TemperatureUnits, Alias("cfgem")]
-    filter_used: Annotated[int, Alias("filtrlvl")]
-    humidity_level: Annotated[int, Alias("humlvl")]
-    humidifier_on: Annotated[bool, Alias("humid")]
-    uv_lamp_level: Annotated[int, Alias("uvlvl")]
-    is_disconnected: Annotated[bool, Alias("isDisconnected")]
-    indoor_unit: Annotated[InDoorUnit, Alias("idu")]
-    outdoor_unit: Annotated[OutDoorUnit, Alias("odu")]
-    time_stamp: Annotated[datetime, Alias("utcTime")]
+    temperature_unit: TemperatureUnits
+    filter_used: int
+    humidity_level: int
+    humidifier_on: bool
+    uv_lamp_level: int
+    is_disconnected: bool
+    indoor_unit: InDoorUnit
+    outdoor_unit: OutDoorUnit
+    time_stamp: datetime
     zones: List[StatusZone]
 
-    @classmethod
-    def __pre_deserialize__(cls, d: Dict[Any, Any]) -> Dict[Any, Any]:
+
+class StatusSchema(BaseSchema):
+    class Meta:
+        unknown = EXCLUDE
+    outdoor_temperature = fields.Float(data_key="oat")
+    mode = fields.String()
+    temperature_unit = fields.Enum(TemperatureUnits, by_value=True, data_key="cfgem")
+    filter_used = fields.Integer(data_key="filtrlvl")
+    humidity_level = fields.Integer(data_key="humlvl")
+    humidifier_on = BooleanWithSerialize(truthy=["on"], falsy=["off"], data_key="humid")
+    uv_lamp_level = fields.Integer(data_key="uvlvl")
+    is_disconnected = fields.Boolean(data_key="isDisconnected")
+    indoor_unit = fields.Nested(InDoorUnitSchema, data_key="idu")
+    outdoor_unit = fields.Nested(OutDoorUnitSchema, data_key="odu")
+    time_stamp = fields.DateTime(data_key="utcTime")
+    zones = fields.List(fields.Nested(StatusZoneSchema))
+
+    @pre_load
+    def skip_zones(self, data, **kwargs):
         enabled_zones = []
-        for zone in d.get("zones", []):
+        for zone in data.get("zones", []):
             if zone["enabled"] == "on":
                 enabled_zones.append(zone)
-        d["zones"] = enabled_zones
-        d["humid"] = d["humid"] == "on"
-        return d
+        data["zones"] = enabled_zones
+        return data
 
-    def __post_serialize__(self, d: Dict, context: Optional[Dict] = None):
-        if d["humid"]:
-            d["humid"] = "on"
-        else:
-            d["humid"] = "off"
-        return d
+    @post_load
+    def make(self, data, **kwargs):
+        return Status(**data)

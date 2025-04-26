@@ -18,6 +18,9 @@ path_root = Path(__file__).parents[1]
 sys.path.append(str(path_root))
 
 from src.carrier_api import InfinityEnergy, Profile, Status, Config, ConfigZone, TemperatureUnits, ActivityTypes, FanModes, SystemModes # noqa: E402
+from src.carrier_api.schema.profile import ProfileSchema # noqa: E402
+from src.carrier_api.schema.energy import InfinityEnergySchema # noqa: E402
+from src.carrier_api.schema.status import StatusSchema, StatusZoneSchema # noqa: E402
 
 _LOGGER = getLogger(__name__)
 
@@ -30,40 +33,38 @@ class SchemaTestBase(IsolatedAsyncioTestCase):
 class InfinityEnergyTest(SchemaTestBase):
     def setUp(self):
         super().setUp()
-        self.schema = InfinityEnergy
-        self.instance: InfinityEnergy = self.schema.from_dict(self.energy_response["infinityEnergy"])
+        self.schema = InfinityEnergySchema()
+        self.instance: InfinityEnergy = self.schema.load(self.energy_response["infinityEnergy"])
 
-    async def test_raw(self):
-        self.energy_response["infinityEnergy"]["energyConfig"]["hspf"] = float(self.energy_response["infinityEnergy"]["energyConfig"]["hspf"])
-        self.energy_response["infinityEnergy"]["energyConfig"]["seer"] = int(self.energy_response["infinityEnergy"]["energyConfig"]["seer"])
-        assert self.energy_response["infinityEnergy"] == self.instance.to_dict()
+    async def test_energy_raw(self):
+        assert self.schema.load(self.schema.dump(self.instance)) == self.instance
 
-    async def test_fan_show(self):
+    async def test_energy_fan_show(self):
         assert self.instance.config.fan.show() == False
 
-    async def test_gas_show(self):
+    async def test_energy_gas_show(self):
         assert self.instance.config.gas.show() == True
 
-    async def test_seer(self):
+    async def test_energy_seer(self):
         assert self.instance.config.seer == 15
 
-    async def test_hspf(self):
+    async def test_energy_hspf(self):
         assert self.instance.config.hspf == 8.80078125
 
-    async def test_current_year_measurements(self):
+    async def test_energy_current_year_measurements(self):
         assert self.instance.current_year_measurements().api_id == "year1"
         assert self.instance.current_year_measurements().gas == 25905
 
 class ProfileTest(SchemaTestBase):
     def setUp(self):
         super().setUp()
-        self.schema = Profile
-        self.instance: Profile = self.schema.from_dict(self.system_response["infinitySystems"][0]["profile"])
+        self.schema = ProfileSchema()
+        self.instance: Profile = self.schema.load(self.system_response["infinitySystems"][0]["profile"])
 
-    async def test_raw(self):
-        assert self.system_response["infinitySystems"][0]["profile"] == self.instance.to_dict()
+    async def test_profile_raw(self):
+        assert self.schema.load(self.schema.dump(self.instance)) == self.instance
 
-    async def test_attributes(self):
+    async def test_profile_attributes(self):
         assert self.instance.name == "HVAC"
         assert self.instance.serial == "SERIALXXX"
         assert self.instance.model == "SYSTXCCWIC01-B"
@@ -80,14 +81,17 @@ class ProfileTest(SchemaTestBase):
 class StatusTest(SchemaTestBase):
     def setUp(self):
         super().setUp()
-        self.schema = Status
-        self.instance: Status = self.schema.from_dict(self.system_response["infinitySystems"][0]["status"])
+        self.schema = StatusSchema()
+        self.instance: Status = self.schema.load(self.system_response["infinitySystems"][0]["status"])
 
-    async def test_raw(self):
-        assert self.schema.from_dict(self.instance.to_dict()) == self.instance
-#        assert self.system_response["infinitySystems"][0]["status"] == self.instance.to_dict() # used for debug
+    async def test_status_raw(self):
+        _LOGGER.error(self.instance)
+        dump = self.schema.dump(self.instance)
+        _LOGGER.error(dump)
+#        assert dump == self.system_response["infinitySystems"][0]["status"]
+        assert self.schema.load(dump) == self.instance
 
-    async def test_attributes(self):
+    async def test_status_attributes(self):
         assert self.instance.outdoor_temperature == 30.0
         assert self.instance.mode == "heat"
         assert self.instance.temperature_unit == TemperatureUnits.FAHRENHEIT

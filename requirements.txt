@@ -8,3 +8,5 @@ pytest
 pytest-md
 pytest-emoji
 mashumaro
+marshmallow
+marshmallow-dataclass
