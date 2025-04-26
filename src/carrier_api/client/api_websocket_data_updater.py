@@ -52,7 +52,7 @@ class WebsocketDataUpdater:
                 merged_status.update({"utcTime": datetime.now(UTC).isoformat()})
                 system.status = Status.from_dict(merged_status)
             case "InfinityConfig":
-                config_dict = system.status.to_dict()
+                config_dict = system.config.to_dict()
                 _message_id = websocket_message_json.pop("id", None)
                 _config_id = websocket_message_json.pop("infinitySystemConfigurationId", None)
                 _LOGGER.debug("InfinityConfig received: %s", websocket_message)

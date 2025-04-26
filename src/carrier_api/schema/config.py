@@ -59,7 +59,7 @@ class ConfigZone(_BaseModel):
     _enabled: Annotated[str, Alias("enabled")] = "on"
     hold_activity: Annotated[Optional[ActivityTypes], Alias("holdActivity")] = None
     hold: Annotated[bool, Alias("hold")]
-    hold_until: Annotated[Optional[str], Alias("otmr")]
+    hold_until: Annotated[Optional[str], Alias("otmr")] = None
     program: ConfigZoneProgram
     occupancy_enabled: Annotated[bool, Alias("occEnabled")]
     activities: List[ConfigZoneActivity]
@@ -149,7 +149,7 @@ class Config(_BaseModel):
     humidifier_enabled: Annotated[bool, Alias("cfghumid")]
     vacation_cool_set_point: Annotated[float, Alias("vacmaxt")]
     vacation_heat_set_point: Annotated[float, Alias("vacmint")]
-    vacation_fan: Annotated[Optional[FanModes], Alias("vacfan")]
+    vacation_fan: Annotated[Optional[FanModes], Alias("vacfan")] = None
     zones: List[ConfigZone]
 
     @classmethod

@@ -111,6 +111,13 @@ class StatusTest(SchemaTestBase):
         assert self.instance.zones[0].conditioning == "active_heat"
         assert self.instance.zones[0].zone_conditioning_const == SystemModes.HEAT
 
+    async def test_hold_until(self):
+        self.system_response["infinitySystems"][0]["status"]["zones"][0]["hold"] = "on"
+        self.system_response["infinitySystems"][0]["status"]["zones"][0]["otmr"] = "07:30"
+        self.instance: Status = self.schema.from_dict(self.system_response["infinitySystems"][0]["status"])
+        assert self.instance.zones[0].hold == True
+        assert self.instance.zones[0].hold_until == time(7, 30)
+
 
 class ConfigTest(SchemaTestBase):
     def setUp(self):

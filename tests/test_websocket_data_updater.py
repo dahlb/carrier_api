@@ -16,7 +16,7 @@ import sys
 path_root = Path(__file__).parents[1]
 sys.path.append(str(path_root))
 
-from src.carrier_api import Profile, Status, Config, InfinityEnergy, System, Systems, WebsocketDataUpdater, ActivityTypes, FanModes # noqa: E402
+from src.carrier_api import Status, Config, InfinityEnergy, System, Systems, WebsocketDataUpdater, ActivityTypes, FanModes # noqa: E402
 
 
 class WebsocketDataUpdaterTestBase(IsolatedAsyncioTestCase):
@@ -36,13 +36,15 @@ class MessageStatusIduCfm(WebsocketDataUpdaterTestBase):
     websocket_message_path = 'messages/status_idu_cfm.json'
 
     async def test_setup(self):
-        assert self.carrier_system.status.to_dict() == self.systems_response["infinitySystems"][0]["status"]
+        reprocessed_status = Status.from_dict(Status.to_dict(self.carrier_system.status))
+        assert self.carrier_system.status == reprocessed_status
 
     async def test_message_handler(self):
-        assert self.carrier_system.status.airflow_cfm == 1239
+        assert self.carrier_system.status.indoor_unit.airflow_cfm == 1239
         await self.data_updater.message_handler(self.websocket_message_str)
-        assert self.carrier_system.status.airflow_cfm == 525
-        assert Status(raw=self.carrier_system.status.raw).airflow_cfm == 525
+        assert self.carrier_system.status.indoor_unit.airflow_cfm == 525
+        reprocessed_status = Status.from_dict(Status.to_dict(self.carrier_system.status))
+        assert reprocessed_status.indoor_unit.airflow_cfm == 525
 
 class MessageStatusOduOpmode(WebsocketDataUpdaterTestBase):
     websocket_message_path = 'messages/status_odu_opmode.json'
@@ -51,7 +53,8 @@ class MessageStatusOduOpmode(WebsocketDataUpdaterTestBase):
         assert self.carrier_system.status.mode == "heat"
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.mode == "heat"
-        assert Status(raw=self.carrier_system.status.raw).mode == "heat"
+        reprocessed_status = Status.from_dict(Status.to_dict(self.carrier_system.status))
+        assert reprocessed_status.mode == "heat"
 
 class MessageStatusZoneRh(WebsocketDataUpdaterTestBase):
     websocket_message_path = 'messages/status_zone_rh.json'
@@ -60,7 +63,8 @@ class MessageStatusZoneRh(WebsocketDataUpdaterTestBase):
         assert self.carrier_system.status.zones[0].humidity == 32
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.zones[0].humidity == 34
-        assert Status(raw=self.carrier_system.status.raw).zones[0].humidity == 34
+        reprocessed_status = Status.from_dict(Status.to_dict(self.carrier_system.status))
+        assert reprocessed_status.zones[0].humidity == 34
 
 class MessageStatusZoneConditioning(WebsocketDataUpdaterTestBase):
     websocket_message_path = 'messages/status_zone_conditioning.json'
@@ -69,7 +73,8 @@ class MessageStatusZoneConditioning(WebsocketDataUpdaterTestBase):
         assert self.carrier_system.status.zones[0].conditioning == "active_heat"
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.zones[0].conditioning == "idle"
-        assert Status(raw=self.carrier_system.status.raw).zones[0].conditioning == "idle"
+        reprocessed_status = Status.from_dict(Status.to_dict(self.carrier_system.status))
+        assert reprocessed_status.zones[0].conditioning == "idle"
 
 class MessageStatusZoneActivity(WebsocketDataUpdaterTestBase):
     websocket_message_path = 'messages/status_zone_activity.json'
@@ -82,7 +87,7 @@ class MessageStatusZoneActivity(WebsocketDataUpdaterTestBase):
         assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.HOME
         assert self.carrier_system.status.zones[0].heat_set_point == 77
         assert self.carrier_system.status.zones[0].cool_set_point == 79
-        reprocessed_status = Status(raw=self.carrier_system.status.raw)
+        reprocessed_status = Status.from_dict(Status.to_dict(self.carrier_system.status))
         assert reprocessed_status.zones[0].current_activity == ActivityTypes.HOME
         assert reprocessed_status.zones[0].heat_set_point == 77
         assert reprocessed_status.zones[0].cool_set_point == 79
@@ -97,7 +102,7 @@ class MessageStatusZoneActivityOnly(WebsocketDataUpdaterTestBase):
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.SLEEP
         assert self.carrier_system.status.zones[0].fan == FanModes.MED
-        reprocessed_status = Status(raw=self.carrier_system.status.raw)
+        reprocessed_status = Status.from_dict(Status.to_dict(self.carrier_system.status))
         assert reprocessed_status.zones[0].current_activity == ActivityTypes.SLEEP
         assert self.carrier_system.status.zones[0].fan == FanModes.MED
 
@@ -109,7 +114,7 @@ class MessageStatusZoneHold(WebsocketDataUpdaterTestBase):
         assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.MANUAL
-        reprocessed_status = Status(raw=self.carrier_system.status.raw)
+        reprocessed_status = Status.from_dict(Status.to_dict(self.carrier_system.status))
         assert reprocessed_status.zones[0].current_activity == ActivityTypes.MANUAL
 
 class MessageStatusZoneHtsp(WebsocketDataUpdaterTestBase):
@@ -121,7 +126,7 @@ class MessageStatusZoneHtsp(WebsocketDataUpdaterTestBase):
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.zones[0].heat_set_point == 72
         assert self.carrier_system.status.zones[0].cool_set_point == 85
-        reprocessed_status = Status(raw=self.carrier_system.status.raw)
+        reprocessed_status = Status.from_dict(Status.to_dict(self.carrier_system.status))
         assert reprocessed_status.zones[0].heat_set_point == 72
         assert reprocessed_status.zones[0].cool_set_point == 85
 
@@ -132,7 +137,7 @@ class MessageConfigZoneHold(WebsocketDataUpdaterTestBase):
         assert self.carrier_system.config.zones[0].hold_activity is None
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.config.zones[0].hold_activity == ActivityTypes.MANUAL
-        reprocessed_config = Config(raw=self.carrier_system.config.raw)
+        reprocessed_config = Config.from_dict(Config.to_dict(self.carrier_system.config))
         assert reprocessed_config.zones[0].hold_activity == ActivityTypes.MANUAL
 
 class MessageConfigZoneProgram(WebsocketDataUpdaterTestBase):
@@ -140,5 +145,5 @@ class MessageConfigZoneProgram(WebsocketDataUpdaterTestBase):
 
     async def test_message_handler(self):
         await self.data_updater.message_handler(self.websocket_message_str)
-        reprocessed_config = Config(raw=self.carrier_system.config.raw)
-        assert self.carrier_system.config.zones[0].program_json == reprocessed_config.zones[0].program_json
+        reprocessed_config = Config.from_dict(Config.to_dict(self.carrier_system.config))
+        assert self.carrier_system.config.zones[0].program == reprocessed_config.zones[0].program

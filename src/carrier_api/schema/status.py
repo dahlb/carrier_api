@@ -18,10 +18,10 @@ class StatusZone(_BaseModel):
     current_activity: Annotated[ActivityTypes, Alias("currentActivity")]
     temperature: Annotated[float, Alias("rt")]
     humidity: Annotated[int, Alias("rh")]
-    occupancy: Optional[bool] | None
+    occupancy: Optional[bool] = None
     fan: Annotated[FanModes, Alias("fan")]
     hold: bool
-    hold_until: Annotated[Optional[time], Alias("otmr")]
+    hold_until: Annotated[Optional[time], Alias("otmr")] = None
     heat_set_point: Annotated[float, Alias("htsp")]
     cool_set_point: Annotated[float, Alias("clsp")]
     conditioning: Annotated[str, Alias("zoneconditioning")]
@@ -95,7 +95,7 @@ class Status(_BaseModel):
         d["humid"] = d["humid"] == "on"
         return d
 
-    def __post_serialize__(self, d: Dict, context: Optional[Dict] = None):
+    def __post_serialize__(self, d: Dict[Any, Any]):
         if d["humid"]:
             d["humid"] = "on"
         else:

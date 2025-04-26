@@ -7,7 +7,7 @@ from .. import Profile, Status, Config, InfinityEnergy
 
 @dataclass(kw_only=True)
 class System(_BaseModel):
-    profile: Profile
-    status: Status
-    config: Config
-    energy: Optional[InfinityEnergy]
+    profile: Profile = None
+    status: Status = None
+    config: Config = None
+    energy: Optional[InfinityEnergy] = None

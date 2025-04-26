@@ -1,10 +1,10 @@
 """Schema for Blueair AWS (abs)."""
 
 from mashumaro.config import BaseConfig
-from mashumaro.mixins.json import DataClassJSONMixin
+from mashumaro.mixins.dict import DataClassDictMixin
 
 
-class _BaseModel(DataClassJSONMixin):
+class _BaseModel(DataClassDictMixin):
     """Model shared between schema definitions."""
 
     class Config(BaseConfig):
