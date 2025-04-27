@@ -1,11 +1,13 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, time
 from logging import getLogger
 from typing import Annotated, Dict, Any, Optional, List
 
+from mashumaro import field_options
 from mashumaro.types import Alias
 
 from . import _BaseModel
+from .boolean import BooleanSerializationStrategy
 from .. import ActivityTypes, FanModes, TemperatureUnits
 
 _LOGGER = getLogger(__name__)
@@ -58,31 +60,26 @@ class ConfigZone(_BaseModel):
     name: str
     _enabled: Annotated[str, Alias("enabled")] = "on"
     hold_activity: Annotated[Optional[ActivityTypes], Alias("holdActivity")] = None
-    hold: Annotated[bool, Alias("hold")]
+    hold: Annotated[bool, Alias("hold")] = field(
+        metadata=field_options(
+            serialization_strategy=BooleanSerializationStrategy(truthy="on", falsy="off")
+        )
+    )
     hold_until: Annotated[Optional[str], Alias("otmr")] = None
     program: ConfigZoneProgram
-    occupancy_enabled: Annotated[bool, Alias("occEnabled")]
+    occupancy_enabled: Annotated[bool, Alias("occEnabled")] = field(
+        metadata=field_options(
+            serialization_strategy=BooleanSerializationStrategy(truthy="on", falsy="off")
+        ), default=False
+    )
     activities: List[ConfigZoneActivity]
 
     @classmethod
     def __pre_deserialize__(cls, d: Dict[Any, Any]) -> Dict[Any, Any]:
-        d["hold"] = d["hold"] == "on"
-        d["occEnabled"] = d.get("occEnabled", None) == "on"
         if d.get("otmr", None) == "None":
             d["otmr"] = None
         if d["holdActivity"] == "None":
             d["holdActivity"] = None
-        return d
-
-    def __post_serialize__(self, d: Dict, context: Optional[Dict] = None):
-        if d["hold"]:
-            d["hold"] = "on"
-        else:
-            d["hold"] = "off"
-        if d["occEnabled"]:
-            d["occEnabled"] = "on"
-        else:
-            d["occEnabled"] = "off"
         return d
 
     def find_activity(self, activity_name: ActivityTypes) -> Optional[ConfigZoneActivity]:
@@ -145,8 +142,16 @@ class Config(_BaseModel):
     etag: str
     fuel_type: Annotated[str, Alias("fueltype")]
     gas_unit: Annotated[str, Alias("gasunit")]
-    uv_enabled: Annotated[bool, Alias("cfguv")]
-    humidifier_enabled: Annotated[bool, Alias("cfghumid")]
+    uv_enabled: Annotated[bool, Alias("cfguv")] = field(
+        metadata=field_options(
+            serialization_strategy=BooleanSerializationStrategy(truthy="on", falsy="off")
+        )
+    )
+    humidifier_enabled: Annotated[bool, Alias("cfghumid")] = field(
+        metadata=field_options(
+            serialization_strategy=BooleanSerializationStrategy(truthy="on", falsy="off")
+        )
+    )
     vacation_cool_set_point: Annotated[float, Alias("vacmaxt")]
     vacation_heat_set_point: Annotated[float, Alias("vacmint")]
     vacation_fan: Annotated[Optional[FanModes], Alias("vacfan")] = None
@@ -159,19 +164,6 @@ class Config(_BaseModel):
             if zone["enabled"] == "on":
                 enabled_zones.append(zone)
         d["zones"] = enabled_zones
-        d["cfguv"] = d["cfguv"] == "on"
-        d["cfghumid"] = d["cfghumid"] == "on"
         if d["vacfan"] == "None":
             d["vacfan"] = None
-        return d
-
-    def __post_serialize__(self, d: Dict, context: Optional[Dict] = None):
-        if d["cfguv"]:
-            d["cfguv"] = "on"
-        else:
-            d["cfguv"] = "off"
-        if d["cfghumid"]:
-            d["cfghumid"] = "on"
-        else:
-            d["cfghumid"] = "off"
         return d

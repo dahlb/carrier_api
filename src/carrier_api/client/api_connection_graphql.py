@@ -368,9 +368,11 @@ class ApiConnectionGraphql:
     async def load_data(self) -> Systems:
         systems_response = await self.get_systems()
         systems = Systems.from_dict(systems_response)
+        systems.raw = systems_response
         for system in systems.systems:
             energy_response = await self.get_energy(system.profile.serial)
             energy = InfinityEnergy.from_dict(energy_response["infinityEnergy"])
+            energy.raw = energy_response
             system.energy = energy
         return systems
 

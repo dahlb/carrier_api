@@ -1,11 +1,13 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, time
 from logging import getLogger
 from typing import Annotated, Dict, Any, Optional, List
 
+from mashumaro import field_options
 from mashumaro.types import Alias
 
 from . import _BaseModel
+from .boolean import BooleanSerializationStrategy
 from .. import ActivityTypes, FanModes, SystemModes, TemperatureUnits
 
 _LOGGER = getLogger(__name__)
@@ -18,30 +20,21 @@ class StatusZone(_BaseModel):
     current_activity: Annotated[ActivityTypes, Alias("currentActivity")]
     temperature: Annotated[float, Alias("rt")]
     humidity: Annotated[int, Alias("rh")]
-    occupancy: Optional[bool] = None
+    occupancy: Optional[bool] = field(
+        metadata=field_options(
+            serialization_strategy=BooleanSerializationStrategy(truthy="occupied", falsy="unoccupied")
+        ), default=None
+    )
     fan: Annotated[FanModes, Alias("fan")]
-    hold: bool
+    hold: bool = field(
+        metadata=field_options(
+            serialization_strategy=BooleanSerializationStrategy(truthy="on", falsy="off")
+        )
+    )
     hold_until: Annotated[Optional[time], Alias("otmr")] = None
     heat_set_point: Annotated[float, Alias("htsp")]
     cool_set_point: Annotated[float, Alias("clsp")]
     conditioning: Annotated[str, Alias("zoneconditioning")]
-
-    @classmethod
-    def __pre_deserialize__(cls, d: Dict[Any, Any]) -> Dict[Any, Any]:
-        d["occupancy"] = d.get("occupancy", None) == "occupied"
-        d["hold"] = d["hold"] == "on"
-        return d
-
-    def __post_serialize__(self, d: Dict, context: Optional[Dict] = None):
-        if d["occupancy"]:
-            d["occupancy"] = "occupied"
-        else:
-            d["occupancy"] = "unoccupied"
-        if d["hold"]:
-            d["hold"] = "on"
-        else:
-            d["hold"] = "off"
-        return d
 
     @property
     def zone_conditioning_const(self) -> SystemModes:
@@ -77,7 +70,11 @@ class Status(_BaseModel):
     temperature_unit: Annotated[TemperatureUnits, Alias("cfgem")]
     filter_used: Annotated[int, Alias("filtrlvl")]
     humidity_level: Annotated[int, Alias("humlvl")]
-    humidifier_on: Annotated[bool, Alias("humid")]
+    humidifier_on: Annotated[bool, Alias("humid")] = field(
+        metadata=field_options(
+            serialization_strategy=BooleanSerializationStrategy(truthy="on", falsy="off")
+        )
+    )
     uv_lamp_level: Annotated[int, Alias("uvlvl")]
     is_disconnected: Annotated[bool, Alias("isDisconnected")]
     indoor_unit: Annotated[InDoorUnit, Alias("idu")]
@@ -92,12 +89,4 @@ class Status(_BaseModel):
             if zone["enabled"] == "on":
                 enabled_zones.append(zone)
         d["zones"] = enabled_zones
-        d["humid"] = d["humid"] == "on"
-        return d
-
-    def __post_serialize__(self, d: Dict[Any, Any]):
-        if d["humid"]:
-            d["humid"] = "on"
-        else:
-            d["humid"] = "off"
         return d

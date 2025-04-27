@@ -10,3 +10,4 @@ from .system import System
 @dataclass(kw_only=True)
 class Systems(_BaseModel):
     systems: Annotated[List[System], Alias("infinitySystems")] = None
+    raw: dict | None = None

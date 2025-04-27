@@ -48,6 +48,7 @@ class EnergyConfig(_BaseModel):
 class InfinityEnergy(_BaseModel):
     config: Annotated[EnergyConfig, Alias("energyConfig")]
     periods: Annotated[list[EnergyMeasurement], Alias("energyPeriods")]
+    raw: dict | None = None
 
     def current_year_measurements(self):
         for period in self.periods:

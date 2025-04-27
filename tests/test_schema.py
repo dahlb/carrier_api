@@ -36,7 +36,9 @@ class InfinityEnergyTest(SchemaTestBase):
     async def test_raw(self):
         self.energy_response["infinityEnergy"]["energyConfig"]["hspf"] = float(self.energy_response["infinityEnergy"]["energyConfig"]["hspf"])
         self.energy_response["infinityEnergy"]["energyConfig"]["seer"] = int(self.energy_response["infinityEnergy"]["energyConfig"]["seer"])
-        assert self.energy_response["infinityEnergy"] == self.instance.to_dict()
+        energy_dict_withouot_raw = self.instance.to_dict()
+        energy_dict_withouot_raw.pop("raw")
+        assert self.energy_response["infinityEnergy"] == energy_dict_withouot_raw
 
     async def test_fan_show(self):
         assert self.instance.config.fan.show() == False
@@ -102,7 +104,7 @@ class StatusTest(SchemaTestBase):
         assert self.instance.zones[0].current_activity == ActivityTypes.WAKE
         assert self.instance.zones[0].temperature == 74.0
         assert self.instance.zones[0].humidity == 32
-        assert self.instance.zones[0].occupancy == False
+        assert self.instance.zones[0].occupancy is None
         assert self.instance.zones[0].fan == FanModes.MED
         assert self.instance.zones[0].hold == False
         assert self.instance.zones[0].hold_until is None
