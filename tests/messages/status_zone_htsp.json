@@ -3,7 +3,7 @@
    "deviceId":"SERIALXXX",
    "zones":[
       {
-         "id":1,
+         "id":2,
          "htsp":72,
          "clsp":85
       }
