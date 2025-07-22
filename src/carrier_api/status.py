@@ -22,6 +22,7 @@ class StatusZone:
         self.heat_set_point: float = safely_get_json_value(status_zone_json, "htsp", float)
         self.cool_set_point: float = safely_get_json_value(status_zone_json, "clsp", float)
         self.conditioning: str = safely_get_json_value(status_zone_json, "zoneconditioning")
+        self.damper_position: int = safely_get_json_value(status_zone_json, "damperposition", int)
 
     @property
     def zone_conditioning_const(self) -> SystemModes:
