@@ -3,9 +3,8 @@ from logging import getLogger
 from typing import Any, Literal
 
 from aiohttp import ClientSession
-from gql import Client, gql
+from gql import Client, gql, GraphQLRequest
 from gql.transport.aiohttp import AIOHTTPTransport
-from graphql import DocumentNode
 
 from .const import (
     FanModes,
@@ -108,7 +107,7 @@ class ApiConnectionGraphql:
         self.access_token = data["access_token"]
         self.refresh_token = data["refresh_token"]
 
-    async def authed_query(self, operation_name: str, query: DocumentNode, variable_values: dict[str, Any]) -> dict[str, Any]:
+    async def authed_query(self, operation_name: str, query: GraphQLRequest, variable_values: dict[str, Any]) -> dict[str, Any]:
         await self.check_auth_expiration()
         transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql",
                                      headers={'Authorization': f"{self.token_type} {self.access_token}"}, ssl=True)
