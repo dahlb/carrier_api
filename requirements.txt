@@ -1,4 +1,4 @@
-ruff==0.14.0
+ruff==0.14.1
 gql[aiohttp]
 aiohttp
 deepmerge
