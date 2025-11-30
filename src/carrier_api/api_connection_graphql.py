@@ -462,10 +462,14 @@ class ApiConnectionGraphql:
             }
         }
         if humidity_target == 0:
-            variables["input"]["humidityHome"]["humidifier"] = "off"
+            variables["input"]["humidityHome"] = {
+                "humidifier": "off"
+            }
         else:
-            variables["input"]["humidityHome"]["humidifier"] = "on"
-            variables["input"]["humidityHome"]["rhtg"] = humidity_target/5
+            variables["input"]["humidityHome"] = {
+                "humidifier": "on",
+                "rhtg": humidity_target/5
+            }
         return await self._update_infinity_config(variables)
 
     async def set_heat_source(self, system_serial: str, heat_source: HeatSourceTypes) -> dict[str, Any]:
