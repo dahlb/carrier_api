@@ -452,6 +452,22 @@ class ApiConnectionGraphql:
         }
         return await self._update_infinity_config(variables)
 
+    async def set_config_heat_humidity(self, system_serial: str, humidity_target: int) -> dict[str, Any]:
+        if humidity_target not in [0, 5, 10, 15, 20, 25, 30, 35, 40, 45]:
+            raise ValueError(f"{humidity_target} is not a valid humidity target")
+        variables = {
+            "input": {
+                "serial": system_serial,
+                "humidityHome": { }
+            }
+        }
+        if humidity_target == 0:
+            variables["input"]["humidityHome"]["humidifier"] = "off"
+        else:
+            variables["input"]["humidityHome"]["humidifier"] = "on"
+            variables["input"]["humidityHome"]["rhtg"] = humidity_target/5
+        return await self._update_infinity_config(variables)
+
     async def set_heat_source(self, system_serial: str, heat_source: HeatSourceTypes) -> dict[str, Any]:
         if heat_source not in HeatSourceTypes:
             raise ValueError(f"{heat_source} is not a valid heat source")
