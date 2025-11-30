@@ -127,6 +127,7 @@ class Config:
     zones: list[ConfigZone] | None = None
     uv_enabled: bool | None = None
     humidifier_enabled: bool | None = None
+    humidifier_heat_target: int | None = None
 
     def __init__(
         self,
@@ -141,6 +142,9 @@ class Config:
         self.gas_unit = safely_get_json_value(self.raw, "gasunit")
         self.uv_enabled = safely_get_json_value(self.raw, "cfguv") == "on"
         self.humidifier_enabled = safely_get_json_value(self.raw, "cfghumid") == "on"
+        self.humidifier_heat_target = safely_get_json_value(self.raw, "humidityHome.rhtg", int)
+        if self.humidifier_heat_target is not None:
+            self.humidifier_heat_target = self.humidifier_heat_target * 5
         vacation_json = {
             "type": "vacation",
             "clsp": self.raw["vacmaxt"],
