@@ -144,3 +144,11 @@ class MessageConfigZoneProgram(WebsocketDataUpdaterTestBase):
         await self.data_updater.message_handler(self.websocket_message_str)
         reprocessed_config = Config(raw=self.carrier_system.config.raw)
         assert self.carrier_system.config.zones[0].program_json == reprocessed_config.zones[0].program_json
+
+class MessageHeartbeatNoDeviceId(WebsocketDataUpdaterTestBase):
+    websocket_message_path = 'messages/heartbeat_with_no_device_id.json'
+
+    async def test_message_handler(self):
+        # should silently reutrn None, not raise ValueError
+        result = await self.data_updater.message_handler(self.websocket_message_str)
+        assert result is None
