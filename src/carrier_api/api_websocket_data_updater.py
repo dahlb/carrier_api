@@ -35,6 +35,10 @@ class WebsocketDataUpdater:
         serial_id = websocket_message_json.pop("deviceId", None)
         _timestamp = websocket_message_json.pop("timestamp", None)
         _updated_time = websocket_message_json.pop("updatedTime", None)
+        if serial_id is None:
+            _LOGGER.debug("Received message without deviceId, skipping messageType=%s",
+                          message_type)
+            return
         system = self.carrier_system(serial_id=serial_id)
         if system is None:
             return
