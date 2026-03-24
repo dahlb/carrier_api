@@ -14,7 +14,7 @@ def safely_get_json_value(json, key, callable_to_cast=None):
                     value = value[int(x)]
                 except (TypeError, KeyError, ValueError):
                     value = None
-    
+
     try:
         if value.lower() == "none":
             value = None
