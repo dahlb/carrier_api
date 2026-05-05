@@ -11,11 +11,11 @@ _LOGGER = getLogger(__name__)
 
 class System:
     def __init__(
-            self,
-            profile: Profile,
-            status: Status,
-            config: Config,
-            energy: Energy,
+        self,
+        profile: Profile,
+        status: Status,
+        config: Config,
+        energy: Energy,
     ):
         self.profile = profile
         self.status = status

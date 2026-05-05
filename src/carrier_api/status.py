@@ -82,8 +82,8 @@ class Status:
         self.temperature_unit: TemperatureUnits = TemperatureUnits(self.raw["cfgem"])
         self.filter_used: int = safely_get_json_value(self.raw, "filtrlvl", int)
         self.humidity_level: int = safely_get_json_value(self.raw, "humlvl", int)
-        if self.raw.get('humid') is not None:
-            self.humidifier_on: bool = safely_get_json_value(self.raw, "humid", str) == 'on'
+        if self.raw.get("humid") is not None:
+            self.humidifier_on: bool = safely_get_json_value(self.raw, "humid", str) == "on"
         self.uv_lamp_level: int = safely_get_json_value(self.raw, "uvlvl", int)
         self.is_disconnected: bool = safely_get_json_value(self.raw, "isDisconnected", bool)
         self.airflow_cfm: int = safely_get_json_value(self.raw, "idu.cfm", int)
@@ -110,7 +110,9 @@ class Status:
         return {
             "outdoor_temperature": self.outdoor_temperature,
             "mode": self.mode,
-            "temperature_unit": self.temperature_unit.value,
+            "temperature_unit": self.temperature_unit.value
+            if self.temperature_unit is not None
+            else None,
             "filter_used": self.filter_used,
             "is_disconnected": self.is_disconnected,
             "airflow_cfm": self.airflow_cfm,
@@ -120,7 +122,7 @@ class Status:
             "humidifier_on": self.humidifier_on,
             "outdoor_unit_operational_status": self.outdoor_unit_operational_status,
             "indoor_unit_operational_status": self.indoor_unit_operational_status,
-            "zones": [zone.__repr__() for zone in self.zones],
+            "zones": [zone.__repr__() for zone in self.zones or []],
         }
 
     def __str__(self):

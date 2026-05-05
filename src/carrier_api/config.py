@@ -8,7 +8,9 @@ _LOGGER = getLogger(__name__)
 
 
 def active_schedule_periods(periods_json: list[dict]):
-    return list(filter(lambda period: safely_get_json_value(period, "enabled") == "on", periods_json))
+    return list(
+        filter(lambda period: safely_get_json_value(period, "enabled") == "on", periods_json)
+    )
 
 
 class ConfigZoneActivity:
@@ -36,16 +38,16 @@ class ConfigZone:
     def __init__(self, zone_json: dict, vacation_json: dict):
         self.api_id = safely_get_json_value(zone_json, "id", str)
         self.name: str = safely_get_json_value(zone_json, "name")
-        self.hold_activity: ActivityTypes = safely_get_json_value(zone_json, "holdActivity", ActivityTypes)
+        self.hold_activity: ActivityTypes = safely_get_json_value(
+            zone_json, "holdActivity", ActivityTypes
+        )
         self.hold: bool = safely_get_json_value(zone_json, "hold") == "on"
         self.hold_until: str = safely_get_json_value(zone_json, "otmr")
         self.program_json: dict = safely_get_json_value(zone_json, "program")
         self.occupancy_enabled: bool = safely_get_json_value(zone_json, "occEnabled") == "on"
         self.activities = []
         for zone_activity_json in safely_get_json_value(zone_json, "activities"):
-            self.activities.append(
-                ConfigZoneActivity(zone_activity_json=zone_activity_json)
-            )
+            self.activities.append(ConfigZoneActivity(zone_activity_json=zone_activity_json))
         if vacation_json["fan"] is not None:
             self.activities.append(ConfigZoneActivity(zone_activity_json=vacation_json))
 
@@ -77,9 +79,13 @@ class ConfigZone:
                 if (int(hours) < now.hour) or (
                     int(hours) == now.hour and int(minutes) < now.minute
                 ):
-                    return self.find_activity(safely_get_json_value(active_period, "activity", ActivityTypes))
+                    return self.find_activity(
+                        safely_get_json_value(active_period, "activity", ActivityTypes)
+                    )
             yesterday_active_periods = list(self.yesterday_active_periods())
-            return self.find_activity(safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityTypes))
+            return self.find_activity(
+                safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityTypes)
+            )
 
     def next_activity_time(self) -> str | None:
         now = datetime.now()
@@ -87,9 +93,7 @@ class ConfigZone:
         active_periods = self.today_active_periods()
         for active_period in active_periods:
             hours, minutes = active_period["time"].split(":")
-            if (int(hours) > now.hour) or (
-                int(hours) == now.hour and int(minutes) > now.minute
-            ):
+            if (int(hours) > now.hour) or (int(hours) == now.hour and int(minutes) > now.minute):
                 return active_period["time"]
         tomorrow_schedule = self.program_json["day"][(sunday_0_index_today + 1) % 7]
         tomorrow_active_schedule_periods = active_schedule_periods(tomorrow_schedule["period"])
@@ -154,16 +158,14 @@ class Config:
         self.zones = []
         for zone_json in safely_get_json_value(self.raw, "zones"):
             if safely_get_json_value(zone_json, "enabled") == "on":
-                self.zones.append(
-                    ConfigZone(zone_json=zone_json, vacation_json=vacation_json)
-                )
+                self.zones.append(ConfigZone(zone_json=zone_json, vacation_json=vacation_json))
 
     def __repr__(self):
         return {
             "temperature_unit": self.temperature_unit,
             "mode": self.mode,
             "heat_source": self.heat_source,
-            "zones": [zone.__repr__() for zone in self.zones],
+            "zones": [zone.__repr__() for zone in self.zones or []],
         }
 
     def __str__(self):

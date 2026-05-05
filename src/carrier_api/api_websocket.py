@@ -16,10 +16,7 @@ class ApiWebsocket:
     task_heartbeat = None
     task_listener = None
 
-    def __init__(
-            self,
-            api_connection_graphql
-    ):
+    def __init__(self, api_connection_graphql):
         self.api_connection_graphql = api_connection_graphql
         self.api_connection_graphql.api_websocket = self
 
@@ -49,18 +46,21 @@ class ApiWebsocket:
             await sleep(55)
 
     async def create_task_heartbeat(self) -> None:
-        self.task_heartbeat = get_event_loop().create_task(self.loop_heartbeat(), name=f"carrier_api_ws_heartbeat:{random()}")
+        self.task_heartbeat = get_event_loop().create_task(
+            self.loop_heartbeat(), name=f"carrier_api_ws_heartbeat:{random()}"
+        )
 
     async def listener(self) -> None:
         await self.api_connection_graphql.check_auth_expiration()
         async with self.api_connection_graphql.api_session.ws_connect(
-                f"wss://realtime.infinity.iot.carrier.com/?Token={self.api_connection_graphql.access_token}") as self.websocket:
+            f"wss://realtime.infinity.iot.carrier.com/?Token={self.api_connection_graphql.access_token}"
+        ) as self.websocket:
             if self.task_heartbeat is None:
                 await self.create_task_heartbeat()
             if self.websocket is not None:
                 async for msg in self.websocket:
                     if msg.type == WSMsgType.TEXT:
-                        if msg.data == 'close cmd':
+                        if msg.data == "close cmd":
                             await self.websocket.close()
                             break
                         else:

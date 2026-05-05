@@ -31,10 +31,10 @@ class ApiConnectionGraphql:
     api_websocket: ApiWebsocket | None = None
 
     def __init__(
-            self,
-            username: str,
-            password: str,
-            client_session: ClientSession | None = None,
+        self,
+        username: str,
+        password: str,
+        client_session: ClientSession | None = None,
     ):
         self.username = username
         self.password = password
@@ -47,10 +47,12 @@ class ApiConnectionGraphql:
         await self.api_session.close()
 
     async def login(self) -> None:
-        transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth", ssl=True)
+        transport = AIOHTTPTransport(
+            url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth", ssl=True
+        )
         async with Client(
-                transport=transport,
-                fetch_schema_from_transport=False,
+            transport=transport,
+            fetch_schema_from_transport=False,
         ) as session:
             query = gql(
                 """
@@ -71,12 +73,16 @@ class ApiConnectionGraphql:
             """
             )
 
-            result = await session.execute(query,
-                                           variable_values={"input": {"password": self.password, "username": self.username}},
-                                           operation_name="assistedLogin")
+            result = await session.execute(
+                query,
+                variable_values={"input": {"password": self.password, "username": self.username}},
+                operation_name="assistedLogin",
+            )
             success = result["assistedLogin"]["success"]
             if success:
-                self.expires_at = datetime.now() + timedelta(seconds=result["assistedLogin"]["data"]["expires_in"])
+                self.expires_at = datetime.now() + timedelta(
+                    seconds=result["assistedLogin"]["data"]["expires_in"]
+                )
                 self.token_type = result["assistedLogin"]["data"]["token_type"]
                 self.access_token = result["assistedLogin"]["data"]["access_token"]
                 self.refresh_token = result["assistedLogin"]["data"]["refresh_token"]
@@ -97,7 +103,7 @@ class ApiConnectionGraphql:
             "client_id": "0oa1ce7hwjuZbfOMB4x7",
             "grant_type": "refresh_token",
             "refresh_token": self.refresh_token,
-            "scope": "offline_access"
+            "scope": "offline_access",
         }
         response = await self.api_session.post(url=url, data=json_body)
         response.raise_for_status()
@@ -107,15 +113,22 @@ class ApiConnectionGraphql:
         self.access_token = data["access_token"]
         self.refresh_token = data["refresh_token"]
 
-    async def authed_query(self, operation_name: str, query: GraphQLRequest, variable_values: dict[str, Any]) -> dict[str, Any]:
+    async def authed_query(
+        self, operation_name: str, query: GraphQLRequest, variable_values: dict[str, Any]
+    ) -> dict[str, Any]:
         await self.check_auth_expiration()
-        transport = AIOHTTPTransport(url="https://dataservice.infinity.iot.carrier.com/graphql",
-                                     headers={'Authorization': f"{self.token_type} {self.access_token}"}, ssl=True)
+        transport = AIOHTTPTransport(
+            url="https://dataservice.infinity.iot.carrier.com/graphql",
+            headers={"Authorization": f"{self.token_type} {self.access_token}"},
+            ssl=True,
+        )
         async with Client(
-                transport=transport,
-                fetch_schema_from_transport=False,
+            transport=transport,
+            fetch_schema_from_transport=False,
         ) as session:
-            return await session.execute(query, variable_values=variable_values, operation_name=operation_name)
+            return await session.execute(
+                query, variable_values=variable_values, operation_name=operation_name
+            )
 
     async def get_user_info(self) -> dict[str, Any]:
         operation_name = "getUser"
@@ -167,7 +180,9 @@ class ApiConnectionGraphql:
             """
         )
         variable_values = {"userName": self.username}
-        return await self.authed_query(operation_name=operation_name, query=query, variable_values=variable_values)
+        return await self.authed_query(
+            operation_name=operation_name, query=query, variable_values=variable_values
+        )
 
     async def get_systems(self) -> dict[str, Any]:
         operation_name = "getInfinitySystems"
@@ -313,7 +328,9 @@ class ApiConnectionGraphql:
             """
         )
         variable_values = {"userName": self.username}
-        return await self.authed_query(operation_name=operation_name, query=query, variable_values=variable_values)
+        return await self.authed_query(
+            operation_name=operation_name, query=query, variable_values=variable_values
+        )
 
     async def get_energy(self, system_serial: str) -> dict[str, Any]:
         operation_name = "getInfinityEnergy"
@@ -373,7 +390,9 @@ class ApiConnectionGraphql:
             """
         )
         variable_values = {"serial": system_serial}
-        return await self.authed_query(operation_name=operation_name, query=query, variable_values=variable_values)
+        return await self.authed_query(
+            operation_name=operation_name, query=query, variable_values=variable_values
+        )
 
     async def load_data(self) -> list[System]:
         system_response = await self.get_systems()
@@ -398,7 +417,9 @@ class ApiConnectionGraphql:
             """
         )
         _LOGGER.debug(f"updateInfinityConfig: {variables}")
-        response = await self.authed_query(operation_name="updateInfinityConfig", query=query, variable_values=variables)
+        response = await self.authed_query(
+            operation_name="updateInfinityConfig", query=query, variable_values=variables
+        )
         if self.api_websocket is not None:
             await self.api_websocket.send_reconcile()
         else:
@@ -416,7 +437,9 @@ class ApiConnectionGraphql:
             """
         )
         _LOGGER.debug(f"updateInfinityZoneActivity: {variables}")
-        response = await self.authed_query(operation_name="updateInfinityZoneActivity", query=query, variable_values=variables)
+        response = await self.authed_query(
+            operation_name="updateInfinityZoneActivity", query=query, variable_values=variables
+        )
         if self.api_websocket is not None:
             await self.api_websocket.send_reconcile()
         else:
@@ -434,7 +457,9 @@ class ApiConnectionGraphql:
             """
         )
         _LOGGER.debug(f"updateInfinityZoneConfig: {variables}")
-        response = await self.authed_query(operation_name="updateInfinityZoneConfig", query=query, variable_values=variables)
+        response = await self.authed_query(
+            operation_name="updateInfinityZoneConfig", query=query, variable_values=variables
+        )
         if self.api_websocket is not None:
             await self.api_websocket.send_reconcile()
         else:
@@ -444,59 +469,62 @@ class ApiConnectionGraphql:
     async def set_config_mode(self, system_serial: str, mode: SystemModes) -> dict[str, Any]:
         if mode not in SystemModes:
             raise ValueError(f"{mode} is not a valid system mode")
-        variables = {
-            "input": {
-                "serial": system_serial,
-                "mode": mode.value
-            }
-        }
+        variables = {"input": {"serial": system_serial, "mode": mode.value}}
         return await self._update_infinity_config(variables)
 
-    async def set_config_heat_humidity(self, system_serial: str, humidity_target: int) -> dict[str, Any]:
+    async def set_config_heat_humidity(
+        self, system_serial: str, humidity_target: int
+    ) -> dict[str, Any]:
         if humidity_target not in [0, 5, 10, 15, 20, 25, 30, 35, 40, 45]:
             raise ValueError(f"{humidity_target} is not a valid humidity target")
-        variables = {
-            "input": {
-                "serial": system_serial,
-                "humidityHome": { }
-            }
-        }
+        variables = {"input": {"serial": system_serial, "humidityHome": {}}}
         if humidity_target == 0:
-            variables["input"]["humidityHome"] = {
-                "humidifier": "off"
-            }
+            variables["input"]["humidityHome"] = {"humidifier": "off"}
         else:
-            variables["input"]["humidityHome"] = {
-                "humidifier": "on",
-                "rhtg": humidity_target/5
-            }
+            variables["input"]["humidityHome"] = {"humidifier": "on", "rhtg": humidity_target / 5}
         return await self._update_infinity_config(variables)
 
-    async def set_heat_source(self, system_serial: str, heat_source: HeatSourceTypes) -> dict[str, Any]:
+    async def set_heat_source(
+        self, system_serial: str, heat_source: HeatSourceTypes
+    ) -> dict[str, Any]:
         if heat_source not in HeatSourceTypes:
             raise ValueError(f"{heat_source} is not a valid heat source")
-        variables = {
-            "input": {
-                "serial": system_serial,
-                "heatsource": heat_source.value
-            }
-        }
+        variables = {"input": {"serial": system_serial, "heatsource": heat_source.value}}
         return await self._update_infinity_config(variables)
 
-    async def set_humidifier(self, system_serial: str, humidifier_on: bool | None = None,
-                             over_cooling: bool | None = None,
-                             cooling_percent: Literal[5] | Literal[10] | Literal[15] | Literal[20] | Literal[25] |
-                                              Literal[30] | Literal[35] | Literal[40] | Literal[45] | None = None,
-                             heating_percent: Literal[5] | Literal[10] | Literal[15] | Literal[20] | Literal[25] |
-                                              Literal[30] | Literal[35] | Literal[40] | Literal[45] | None = None
-                             ) -> dict[str, Any]:
+    async def set_humidifier(
+        self,
+        system_serial: str,
+        humidifier_on: bool | None = None,
+        over_cooling: bool | None = None,
+        cooling_percent: Literal[5]
+        | Literal[10]
+        | Literal[15]
+        | Literal[20]
+        | Literal[25]
+        | Literal[30]
+        | Literal[35]
+        | Literal[40]
+        | Literal[45]
+        | None = None,
+        heating_percent: Literal[5]
+        | Literal[10]
+        | Literal[15]
+        | Literal[20]
+        | Literal[25]
+        | Literal[30]
+        | Literal[35]
+        | Literal[40]
+        | Literal[45]
+        | None = None,
+    ) -> dict[str, Any]:
         variables: dict[str, Any] = {
             "input": {
                 "serial": system_serial,
                 "humidityHome": {
                     "humid": "manual",
                     "humidifier": "on",
-                }
+                },
             }
         }
 
@@ -513,7 +541,9 @@ class ApiConnectionGraphql:
             variables["input"]["humidityHome"]["rhtg"] = heating_percent / 5
         return await self._update_infinity_config(variables)
 
-    async def update_fan(self, system_serial: str, zone_id: str, activity_type: ActivityTypes, fan_mode: FanModes) -> dict[str, Any]:
+    async def update_fan(
+        self, system_serial: str, zone_id: str, activity_type: ActivityTypes, fan_mode: FanModes
+    ) -> dict[str, Any]:
         if fan_mode not in FanModes:
             raise ValueError(f"{fan_mode} is not a valid fan mode")
         if activity_type not in ActivityTypes:
