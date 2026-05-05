@@ -7,10 +7,11 @@ Then use pytest to drive the tests
     $ pytest tests
 """
 
-from typing import Any
 import json
 from pathlib import Path
-from unittest import IsolatedAsyncioTestCase
+from typing import Any, cast
+
+import pytest
 
 from carrier_api import (
     ActivityTypes,
@@ -27,155 +28,274 @@ from carrier_api import (
 FIXTURE_ROOT = Path(__file__).parent
 
 
-class WebsocketDataUpdaterTestBase(IsolatedAsyncioTestCase):
-    websocket_message_path: str
-    system_response: dict[str, Any]
-    data_updater: WebsocketDataUpdater
-    websocket_message_str: str
-    carrier_system: System
+@pytest.fixture
+def system_response() -> dict[str, Any]:
+    """Load the GraphQL systems fixture.
 
-    def setUp(self) -> None:
-        self.system_response = json.loads((FIXTURE_ROOT / "graphql/systems.json").read_text())
-        energy_response = json.loads((FIXTURE_ROOT / "graphql/energy.json").read_text())
-        systems = []
-        for system_response in self.system_response["infinitySystems"]:
-            profile = Profile(raw=system_response["profile"])
-            status = Status(raw=system_response["status"])
-            config = Config(raw=system_response["config"])
-            energy = Energy(raw=energy_response["infinityEnergy"])
-            systems.append(System(profile=profile, status=status, config=config, energy=energy))
-        self.data_updater = WebsocketDataUpdater(systems)
-        self.websocket_message_str = (FIXTURE_ROOT / self.websocket_message_path).read_text()
-        self.carrier_system = systems[0]
+    Returns:
+        The parsed systems response fixture.
+    """
+    return cast(dict[str, Any], json.loads((FIXTURE_ROOT / "graphql/systems.json").read_text()))
 
 
-class MessageStatusIduCfm(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/status_idu_cfm.json"
+@pytest.fixture
+def energy_response() -> dict[str, Any]:
+    """Load the GraphQL energy fixture.
 
-    async def test_setup(self) -> None:
-        assert (
-            self.carrier_system.status.raw == self.system_response["infinitySystems"][0]["status"]
+    Returns:
+        The parsed energy response fixture.
+    """
+    return cast(dict[str, Any], json.loads((FIXTURE_ROOT / "graphql/energy.json").read_text()))
+
+
+@pytest.fixture
+def systems(system_response: dict[str, Any], energy_response: dict[str, Any]) -> list[System]:
+    """Build Carrier systems from stored API fixtures.
+
+    Args:
+        system_response: The parsed systems response fixture.
+        energy_response: The parsed energy response fixture.
+
+    Returns:
+        Carrier systems built from the fixture responses.
+    """
+    prepared_systems: list[System] = []
+    for single_system_response in system_response["infinitySystems"]:
+        profile = Profile(raw=single_system_response["profile"])
+        status = Status(raw=single_system_response["status"])
+        config = Config(raw=single_system_response["config"])
+        energy = Energy(raw=energy_response["infinityEnergy"])
+        prepared_systems.append(
+            System(profile=profile, status=status, config=config, energy=energy)
         )
-
-    async def test_message_handler(self) -> None:
-        assert self.carrier_system.status.airflow_cfm == 1239
-        await self.data_updater.message_handler(self.websocket_message_str)
-        assert self.carrier_system.status.airflow_cfm == 525
-        assert Status(raw=self.carrier_system.status.raw).airflow_cfm == 525
+    return prepared_systems
 
 
-class MessageStatusOduOpmode(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/status_odu_opmode.json"
+@pytest.fixture
+def data_updater(systems: list[System]) -> WebsocketDataUpdater:
+    """Build a websocket data updater for the prepared systems.
 
-    async def test_message_handler(self) -> None:
-        assert self.carrier_system.status.mode == "heat"
-        await self.data_updater.message_handler(self.websocket_message_str)
-        assert self.carrier_system.status.mode == "heat"
-        assert Status(raw=self.carrier_system.status.raw).mode == "heat"
+    Args:
+        systems: Carrier systems built from fixture responses.
 
-
-class MessageStatusZoneRh(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/status_zone_rh.json"
-
-    async def test_message_handler(self) -> None:
-        assert self.carrier_system.status.zones[0].humidity == 32
-        await self.data_updater.message_handler(self.websocket_message_str)
-        assert self.carrier_system.status.zones[0].humidity == 34
-        assert Status(raw=self.carrier_system.status.raw).zones[0].humidity == 34
+    Returns:
+        A websocket data updater using the prepared systems.
+    """
+    return WebsocketDataUpdater(systems)
 
 
-class MessageStatusZoneConditioning(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/status_zone_conditioning.json"
+@pytest.fixture
+def carrier_system(systems: list[System]) -> System:
+    """Return the primary Carrier system under test.
 
-    async def test_message_handler(self) -> None:
-        assert self.carrier_system.status.zones[0].conditioning == "active_heat"
-        await self.data_updater.message_handler(self.websocket_message_str)
-        assert self.carrier_system.status.zones[0].conditioning == "idle"
-        assert Status(raw=self.carrier_system.status.raw).zones[0].conditioning == "idle"
+    Args:
+        systems: Carrier systems built from fixture responses.
 
-
-class MessageStatusZoneActivity(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/status_zone_activity.json"
-
-    async def test_message_handler(self) -> None:
-        assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
-        assert self.carrier_system.status.zones[0].heat_set_point == 74
-        assert self.carrier_system.status.zones[0].cool_set_point == 78
-        await self.data_updater.message_handler(self.websocket_message_str)
-        assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.HOME
-        assert self.carrier_system.status.zones[0].heat_set_point == 77
-        assert self.carrier_system.status.zones[0].cool_set_point == 79
-        reprocessed_status = Status(raw=self.carrier_system.status.raw)
-        assert reprocessed_status.zones[0].current_activity == ActivityTypes.HOME
-        assert reprocessed_status.zones[0].heat_set_point == 77
-        assert reprocessed_status.zones[0].cool_set_point == 79
+    Returns:
+        The first Carrier system from the fixtures.
+    """
+    return systems[0]
 
 
-class MessageStatusZoneActivityOnly(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/status_zone_activity_only.json"
+@pytest.fixture
+def websocket_message_str(request: pytest.FixtureRequest) -> str:
+    """Load a websocket message fixture selected by the test.
 
-    async def test_message_handler(self) -> None:
-        assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
-        assert self.carrier_system.status.zones[0].fan == FanModes.MED
-        await self.data_updater.message_handler(self.websocket_message_str)
-        assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.SLEEP
-        assert self.carrier_system.status.zones[0].fan == FanModes.MED
-        reprocessed_status = Status(raw=self.carrier_system.status.raw)
-        assert reprocessed_status.zones[0].current_activity == ActivityTypes.SLEEP
-        assert self.carrier_system.status.zones[0].fan == FanModes.MED
+    Args:
+        request: The pytest fixture request containing the message path parameter.
 
-
-class MessageStatusZoneHold(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/status_zone_hold.json"
-
-    async def test_message_handler(self) -> None:
-        assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
-        await self.data_updater.message_handler(self.websocket_message_str)
-        assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.MANUAL
-        reprocessed_status = Status(raw=self.carrier_system.status.raw)
-        assert reprocessed_status.zones[0].current_activity == ActivityTypes.MANUAL
+    Returns:
+        The raw websocket message fixture contents.
+    """
+    message_path = cast(str, request.param)
+    return (FIXTURE_ROOT / message_path).read_text()
 
 
-class MessageStatusZoneHtsp(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/status_zone_htsp.json"
-
-    async def test_message_handler(self) -> None:
-        assert self.carrier_system.status.zones[0].heat_set_point == 74
-        assert self.carrier_system.status.zones[0].cool_set_point == 78
-        await self.data_updater.message_handler(self.websocket_message_str)
-        assert self.carrier_system.status.zones[0].heat_set_point == 72
-        assert self.carrier_system.status.zones[0].cool_set_point == 85
-        reprocessed_status = Status(raw=self.carrier_system.status.raw)
-        assert reprocessed_status.zones[0].heat_set_point == 72
-        assert reprocessed_status.zones[0].cool_set_point == 85
+@pytest.mark.asyncio
+@pytest.mark.parametrize("websocket_message_str", ["messages/status_idu_cfm.json"], indirect=True)
+async def test_status_idu_cfm_setup(
+    system_response: dict[str, Any],
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Verify initial system status fixture setup for IDU CFM messages."""
+    assert carrier_system.status.raw == system_response["infinitySystems"][0]["status"]
+    assert websocket_message_str
 
 
-class MessageConfigZoneHold(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/config_zone_hold.json"
-
-    async def test_message_handler(self) -> None:
-        assert self.carrier_system.config.zones[0].hold_activity is None
-        await self.data_updater.message_handler(self.websocket_message_str)
-        assert self.carrier_system.config.zones[0].hold_activity == ActivityTypes.MANUAL
-        reprocessed_config = Config(raw=self.carrier_system.config.raw)
-        assert reprocessed_config.zones[0].hold_activity == ActivityTypes.MANUAL
-
-
-class MessageConfigZoneProgram(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/config_zone_program.json"
-
-    async def test_message_handler(self) -> None:
-        await self.data_updater.message_handler(self.websocket_message_str)
-        reprocessed_config = Config(raw=self.carrier_system.config.raw)
-        assert (
-            self.carrier_system.config.zones[0].program_json
-            == reprocessed_config.zones[0].program_json
-        )
+@pytest.mark.asyncio
+@pytest.mark.parametrize("websocket_message_str", ["messages/status_idu_cfm.json"], indirect=True)
+async def test_status_idu_cfm_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply an IDU CFM status message."""
+    assert carrier_system.status.airflow_cfm == 1239
+    await data_updater.message_handler(websocket_message_str)
+    assert carrier_system.status.airflow_cfm == 525
+    assert Status(raw=carrier_system.status.raw).airflow_cfm == 525
 
 
-class MessageHeartbeatNoDeviceId(WebsocketDataUpdaterTestBase):
-    websocket_message_path = "messages/heartbeat_with_no_device_id.json"
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str", ["messages/status_odu_opmode.json"], indirect=True
+)
+async def test_status_odu_opmode_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply an ODU operating mode status message."""
+    assert carrier_system.status.mode == "heat"
+    await data_updater.message_handler(websocket_message_str)
+    assert carrier_system.status.mode == "heat"
+    assert Status(raw=carrier_system.status.raw).mode == "heat"
 
-    async def test_message_handler(self) -> None:
-        # should silently return None, not raise ValueError
-        await self.data_updater.message_handler(self.websocket_message_str)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("websocket_message_str", ["messages/status_zone_rh.json"], indirect=True)
+async def test_status_zone_rh_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply a zone humidity status message."""
+    assert carrier_system.status.zones[0].humidity == 32
+    await data_updater.message_handler(websocket_message_str)
+    assert carrier_system.status.zones[0].humidity == 34
+    assert Status(raw=carrier_system.status.raw).zones[0].humidity == 34
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str", ["messages/status_zone_conditioning.json"], indirect=True
+)
+async def test_status_zone_conditioning_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply a zone conditioning status message."""
+    assert carrier_system.status.zones[0].conditioning == "active_heat"
+    await data_updater.message_handler(websocket_message_str)
+    assert carrier_system.status.zones[0].conditioning == "idle"
+    assert Status(raw=carrier_system.status.raw).zones[0].conditioning == "idle"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str", ["messages/status_zone_activity.json"], indirect=True
+)
+async def test_status_zone_activity_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply a zone activity status message."""
+    assert carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
+    assert carrier_system.status.zones[0].heat_set_point == 74
+    assert carrier_system.status.zones[0].cool_set_point == 78
+    await data_updater.message_handler(websocket_message_str)
+    assert carrier_system.status.zones[0].current_activity == ActivityTypes.HOME
+    assert carrier_system.status.zones[0].heat_set_point == 77
+    assert carrier_system.status.zones[0].cool_set_point == 79
+    reprocessed_status = Status(raw=carrier_system.status.raw)
+    assert reprocessed_status.zones[0].current_activity == ActivityTypes.HOME
+    assert reprocessed_status.zones[0].heat_set_point == 77
+    assert reprocessed_status.zones[0].cool_set_point == 79
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str", ["messages/status_zone_activity_only.json"], indirect=True
+)
+async def test_status_zone_activity_only_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply a zone activity-only status message."""
+    assert carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
+    assert carrier_system.status.zones[0].fan == FanModes.MED
+    await data_updater.message_handler(websocket_message_str)
+    assert carrier_system.status.zones[0].current_activity == ActivityTypes.SLEEP
+    assert carrier_system.status.zones[0].fan == FanModes.MED
+    reprocessed_status = Status(raw=carrier_system.status.raw)
+    assert reprocessed_status.zones[0].current_activity == ActivityTypes.SLEEP
+    assert carrier_system.status.zones[0].fan == FanModes.MED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("websocket_message_str", ["messages/status_zone_hold.json"], indirect=True)
+async def test_status_zone_hold_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply a zone hold status message."""
+    assert carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
+    await data_updater.message_handler(websocket_message_str)
+    assert carrier_system.status.zones[0].current_activity == ActivityTypes.MANUAL
+    reprocessed_status = Status(raw=carrier_system.status.raw)
+    assert reprocessed_status.zones[0].current_activity == ActivityTypes.MANUAL
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("websocket_message_str", ["messages/status_zone_htsp.json"], indirect=True)
+async def test_status_zone_htsp_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply a zone heat set point status message."""
+    assert carrier_system.status.zones[0].heat_set_point == 74
+    assert carrier_system.status.zones[0].cool_set_point == 78
+    await data_updater.message_handler(websocket_message_str)
+    assert carrier_system.status.zones[0].heat_set_point == 72
+    assert carrier_system.status.zones[0].cool_set_point == 85
+    reprocessed_status = Status(raw=carrier_system.status.raw)
+    assert reprocessed_status.zones[0].heat_set_point == 72
+    assert reprocessed_status.zones[0].cool_set_point == 85
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("websocket_message_str", ["messages/config_zone_hold.json"], indirect=True)
+async def test_config_zone_hold_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply a zone hold config message."""
+    assert carrier_system.config.zones[0].hold_activity is None
+    await data_updater.message_handler(websocket_message_str)
+    assert carrier_system.config.zones[0].hold_activity == ActivityTypes.MANUAL
+    reprocessed_config = Config(raw=carrier_system.config.raw)
+    assert reprocessed_config.zones[0].hold_activity == ActivityTypes.MANUAL
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str", ["messages/config_zone_program.json"], indirect=True
+)
+async def test_config_zone_program_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply a zone program config message."""
+    await data_updater.message_handler(websocket_message_str)
+    reprocessed_config = Config(raw=carrier_system.config.raw)
+    assert carrier_system.config.zones[0].program_json == reprocessed_config.zones[0].program_json
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str", ["messages/heartbeat_with_no_device_id.json"], indirect=True
+)
+async def test_heartbeat_with_no_device_id_message_handler(
+    data_updater: WebsocketDataUpdater,
+    websocket_message_str: str,
+) -> None:
+    """Apply a heartbeat message without a device ID."""
+    await data_updater.message_handler(websocket_message_str)

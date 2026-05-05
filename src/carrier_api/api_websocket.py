@@ -1,29 +1,35 @@
-import asyncio
-from asyncio import sleep, create_task, CancelledError, current_task
-from logging import getLogger
-from collections.abc import Callable
-from random import random
+from __future__ import annotations
 
-from aiohttp import WSMsgType, ClientWebSocketResponse
+from asyncio import CancelledError, Task, create_task, current_task, sleep
+from collections.abc import Awaitable, Callable
+from logging import getLogger
+from random import random
+from typing import TYPE_CHECKING
+
+from aiohttp import ClientWebSocketResponse, WSMsgType
+
+if TYPE_CHECKING:
+    from .api_connection_graphql import ApiConnectionGraphql
 
 _LOGGER = getLogger(__name__)
 
+AsyncCallback = Callable[[str], Awaitable[None]]
+
 
 class ApiWebsocket:
-    websocket: ClientWebSocketResponse | None = None
-    running = None
-    async_callbacks: list[Callable] = []
-    task_heartbeat = None
-    task_listener = None
-
-    def __init__(self, api_connection_graphql):
+    def __init__(self, api_connection_graphql: ApiConnectionGraphql) -> None:
+        self.websocket: ClientWebSocketResponse | None = None
+        self.running: bool | None = None
+        self.async_callbacks: list[AsyncCallback] = []
+        self.task_heartbeat: Task[None] | None = None
+        self.task_listener: Task[None] | None = None
         self.api_connection_graphql = api_connection_graphql
         self.api_connection_graphql.api_websocket = self
 
-    def callback_add(self, async_callback):
+    def callback_add(self, async_callback: AsyncCallback) -> None:
         self.async_callbacks.append(async_callback)
 
-    def callback_remove(self, async_callback):
+    def callback_remove(self, async_callback: AsyncCallback) -> None:
         self.async_callbacks.remove(async_callback)
 
     async def loop_heartbeat(self) -> None:

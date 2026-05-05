@@ -51,10 +51,11 @@ class ConfigZone:
         if vacation_json["fan"] is not None:
             self.activities.append(ConfigZoneActivity(zone_activity_json=vacation_json))
 
-    def find_activity(self, activity_name: ActivityTypes):
+    def find_activity(self, activity_name: ActivityTypes) -> ConfigZoneActivity | None:
         for activity in self.activities:
             if activity.type == activity_name:
                 return activity
+        return None
 
     def yesterday_active_periods(self):
         now = datetime.now()

@@ -9,7 +9,7 @@ The process is straight-forward.
    - Add a new method try to keep its signature as similar to other region/brands as possible.
    - Add example responses
      - modify a stub file
-     - run `python src/carrier_api/stub.py`
+     - run `./.venv/bin/python src/carrier_api/stub.py` (`.\.venv\Scripts\python src/carrier_api/stub.py` on Windows)
      - add the logging from the console to the source code
  - Create a Pull Request against the [**main**](https://github.com/dahlb/carrier_api/tree/main) branch.
 
