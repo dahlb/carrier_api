@@ -1,9 +1,19 @@
-.idea/
-**/__pycache__
-**.DS_Store
-**@eaDir
-venv/
-dist/
-src/carrier_api.egg-info/
-build/
+.DS_Store
 src/carrier_api/stub.py
+
+# artifacts
+__pycache__
+.pytest*
+*.egg-info
+*/build/*
+*/dist/*
+.mypy_cache
+.ruff_cache
+.venv
+
+# misc
+.coverage
+.vscode
+.idea
+coverage.xml
+uv.lock
