@@ -1,3 +1,5 @@
+"""GraphQL client for Carrier authentication, queries, and config updates."""
+
 from datetime import datetime, timedelta
 from logging import getLogger
 from typing import Any, Literal
@@ -24,6 +26,8 @@ _LOGGER = getLogger(__name__)
 
 
 class ApiConnectionGraphql:
+    """Async Carrier GraphQL API connection with token and websocket support."""
+
     expires_at: datetime = datetime.now()
     refresh_token: str | None = None
     token_type: str | None = None
@@ -36,6 +40,14 @@ class ApiConnectionGraphql:
         password: str,
         client_session: ClientSession | None = None,
     ):
+        """Create a Carrier GraphQL API connection.
+
+        Args:
+            username: Carrier account username.
+            password: Carrier account password.
+            client_session: Optional aiohttp session to reuse for token refresh
+                and websocket operations. A new session is created when omitted.
+        """
         self.username = username
         self.password = password
         if client_session is None:
@@ -44,9 +56,16 @@ class ApiConnectionGraphql:
             self.api_session = client_session
 
     async def cleanup(self) -> None:
+        """Close the underlying aiohttp session owned by the connection."""
         await self.api_session.close()
 
     async def login(self) -> None:
+        """Authenticate with Carrier and initialize websocket support.
+
+        Raises:
+            AuthError: If the assisted login mutation reports an unsuccessful
+                authentication result.
+        """
         transport = AIOHTTPTransport(
             url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth", ssl=True
         )
@@ -92,12 +111,18 @@ class ApiConnectionGraphql:
                 raise AuthError(result)
 
     async def check_auth_expiration(self) -> None:
+        """Ensure the connection has a valid access token before API use."""
         if self.refresh_token is None:
             await self.login()
         if self.expires_at < datetime.now():
             await self.refresh_auth_token()
 
     async def refresh_auth_token(self) -> None:
+        """Refresh the OAuth access token using the stored refresh token.
+
+        Raises:
+            aiohttp.ClientResponseError: If Carrier rejects the refresh request.
+        """
         url = "https://sso.carrier.com/oauth2/default/v1/token"
         json_body = {
             "client_id": "0oa1ce7hwjuZbfOMB4x7",
@@ -116,6 +141,16 @@ class ApiConnectionGraphql:
     async def authed_query(
         self, operation_name: str, query: GraphQLRequest, variable_values: dict[str, Any]
     ) -> dict[str, Any]:
+        """Execute an authenticated Carrier GraphQL operation.
+
+        Args:
+            operation_name: GraphQL operation name to execute.
+            query: Parsed GraphQL request.
+            variable_values: Variables to send with the operation.
+
+        Returns:
+            The decoded GraphQL response data.
+        """
         await self.check_auth_expiration()
         transport = AIOHTTPTransport(
             url="https://dataservice.infinity.iot.carrier.com/graphql",
@@ -131,6 +166,11 @@ class ApiConnectionGraphql:
             )
 
     async def get_user_info(self) -> dict[str, Any]:
+        """Fetch Carrier account profile, location, and device metadata.
+
+        Returns:
+            The decoded ``getUser`` GraphQL response data.
+        """
         operation_name = "getUser"
         query = gql(
             """
@@ -185,6 +225,12 @@ class ApiConnectionGraphql:
         )
 
     async def get_systems(self) -> dict[str, Any]:
+        """Fetch configured Carrier Infinity systems for the current user.
+
+        Returns:
+            The decoded ``getInfinitySystems`` GraphQL response data containing
+            profile, status, and config payloads.
+        """
         operation_name = "getInfinitySystems"
         query = gql(
             """
@@ -333,6 +379,14 @@ class ApiConnectionGraphql:
         )
 
     async def get_energy(self, system_serial: str) -> dict[str, Any]:
+        """Fetch energy configuration and usage for a Carrier system.
+
+        Args:
+            system_serial: Serial number of the Carrier system to query.
+
+        Returns:
+            The decoded ``getInfinityEnergy`` GraphQL response data.
+        """
         operation_name = "getInfinityEnergy"
         query = gql(
             """
@@ -395,6 +449,11 @@ class ApiConnectionGraphql:
         )
 
     async def load_data(self) -> list[System]:
+        """Load all Carrier systems with status, config, and energy models.
+
+        Returns:
+            A list of fully constructed system aggregates for the account.
+        """
         system_response = await self.get_systems()
         systems = []
         for system_response in system_response["infinitySystems"]:
@@ -407,6 +466,14 @@ class ApiConnectionGraphql:
         return systems
 
     async def _update_infinity_config(self, variables: dict[str, Any]) -> dict[str, Any]:
+        """Run the Carrier system-level configuration mutation.
+
+        Args:
+            variables: GraphQL variables containing an ``InfinityConfigInput``.
+
+        Returns:
+            The decoded mutation response.
+        """
         query = gql(
             """
             mutation updateInfinityConfig($input: InfinityConfigInput!) {
@@ -427,6 +494,15 @@ class ApiConnectionGraphql:
         return response
 
     async def _update_infinity_zone_activity(self, variables: dict[str, Any]) -> dict[str, Any]:
+        """Run the Carrier zone activity configuration mutation.
+
+        Args:
+            variables: GraphQL variables containing an
+                ``InfinityZoneActivityInput``.
+
+        Returns:
+            The decoded mutation response.
+        """
         query = gql(
             """
             mutation updateInfinityZoneActivity($input: InfinityZoneActivityInput!) {
@@ -447,6 +523,14 @@ class ApiConnectionGraphql:
         return response
 
     async def _update_infinity_zone_config(self, variables: dict[str, Any]) -> dict[str, Any]:
+        """Run the Carrier zone configuration mutation.
+
+        Args:
+            variables: GraphQL variables containing an ``InfinityZoneConfigInput``.
+
+        Returns:
+            The decoded mutation response.
+        """
         query = gql(
             """
             mutation updateInfinityZoneConfig($input: InfinityZoneConfigInput!) {
@@ -467,6 +551,18 @@ class ApiConnectionGraphql:
         return response
 
     async def set_config_mode(self, system_serial: str, mode: SystemModes) -> dict[str, Any]:
+        """Update a Carrier system's operating mode.
+
+        Args:
+            system_serial: Serial number of the system to update.
+            mode: Requested system operating mode.
+
+        Returns:
+            The decoded mutation response.
+
+        Raises:
+            ValueError: If ``mode`` is not a ``SystemModes`` member.
+        """
         if mode not in SystemModes:
             raise ValueError(f"{mode} is not a valid system mode")
         variables = {"input": {"serial": system_serial, "mode": mode.value}}
@@ -475,6 +571,20 @@ class ApiConnectionGraphql:
     async def set_config_heat_humidity(
         self, system_serial: str, humidity_target: int
     ) -> dict[str, Any]:
+        """Update the heating humidifier target for home mode.
+
+        Args:
+            system_serial: Serial number of the system to update.
+            humidity_target: Target relative humidity percentage. Carrier
+                accepts zero or five-percent increments from 5 through 45.
+
+        Returns:
+            The decoded mutation response.
+
+        Raises:
+            ValueError: If ``humidity_target`` is outside Carrier's accepted
+                values.
+        """
         if humidity_target not in [0, 5, 10, 15, 20, 25, 30, 35, 40, 45]:
             raise ValueError(f"{humidity_target} is not a valid humidity target")
         variables = {"input": {"serial": system_serial, "humidityHome": {}}}
@@ -487,6 +597,18 @@ class ApiConnectionGraphql:
     async def set_heat_source(
         self, system_serial: str, heat_source: HeatSourceTypes
     ) -> dict[str, Any]:
+        """Update which equipment source should provide heat.
+
+        Args:
+            system_serial: Serial number of the system to update.
+            heat_source: Requested heat source routing mode.
+
+        Returns:
+            The decoded mutation response.
+
+        Raises:
+            ValueError: If ``heat_source`` is not a ``HeatSourceTypes`` member.
+        """
         if heat_source not in HeatSourceTypes:
             raise ValueError(f"{heat_source} is not a valid heat source")
         variables = {"input": {"serial": system_serial, "heatsource": heat_source.value}}
@@ -518,6 +640,21 @@ class ApiConnectionGraphql:
         | Literal[45]
         | None = None,
     ) -> dict[str, Any]:
+        """Update home-mode humidifier and dehumidification settings.
+
+        Args:
+            system_serial: Serial number of the system to update.
+            humidifier_on: When ``False``, disable humidification. ``None``
+                leaves the default manual-on mutation payload in place.
+            over_cooling: Optional over-cooling setting for dehumidification.
+            cooling_percent: Optional cooling humidity target in five-percent
+                increments accepted by Carrier.
+            heating_percent: Optional heating humidity target in five-percent
+                increments accepted by Carrier.
+
+        Returns:
+            The decoded mutation response.
+        """
         variables: dict[str, Any] = {
             "input": {
                 "serial": system_serial,
@@ -544,6 +681,21 @@ class ApiConnectionGraphql:
     async def update_fan(
         self, system_serial: str, zone_id: str, activity_type: ActivityTypes, fan_mode: FanModes
     ) -> dict[str, Any]:
+        """Update the fan mode for a zone activity.
+
+        Args:
+            system_serial: Serial number of the system to update.
+            zone_id: Carrier zone identifier.
+            activity_type: Activity whose fan mode should be changed.
+            fan_mode: Requested fan mode.
+
+        Returns:
+            The decoded mutation response.
+
+        Raises:
+            ValueError: If ``fan_mode`` or ``activity_type`` is not a valid enum
+                member.
+        """
         if fan_mode not in FanModes:
             raise ValueError(f"{fan_mode} is not a valid fan mode")
         if activity_type not in ActivityTypes:
@@ -565,6 +717,21 @@ class ApiConnectionGraphql:
         activity_type: ActivityTypes,
         hold_until: str | None = None,
     ):
+        """Place a zone on hold for a selected activity.
+
+        Args:
+            system_serial: Serial number of the system to update.
+            zone_id: Carrier zone identifier.
+            activity_type: Activity to hold.
+            hold_until: Optional Carrier hold-until time string. ``None`` keeps
+                the hold indefinite according to Carrier's API behavior.
+
+        Returns:
+            The decoded mutation response.
+
+        Raises:
+            ValueError: If ``activity_type`` is not a valid enum member.
+        """
         if activity_type not in ActivityTypes:
             raise ValueError(f"{activity_type} is not a valid activity type")
         variables = {
@@ -579,6 +746,15 @@ class ApiConnectionGraphql:
         return await self._update_infinity_zone_config(variables=variables)
 
     async def resume_schedule(self, system_serial: str, zone_id: str):
+        """Clear a zone hold and resume its programmed schedule.
+
+        Args:
+            system_serial: Serial number of the system to update.
+            zone_id: Carrier zone identifier.
+
+        Returns:
+            The decoded mutation response.
+        """
         variables = {
             "input": {
                 "serial": system_serial,
@@ -598,6 +774,22 @@ class ApiConnectionGraphql:
         cool_set_point: str,
         fan_mode: FanModes | None = None,
     ):
+        """Update a zone's manual activity set points and optional fan mode.
+
+        Args:
+            system_serial: Serial number of the system to update.
+            zone_id: Carrier zone identifier.
+            heat_set_point: Requested heat set point as Carrier expects it.
+            cool_set_point: Requested cool set point as Carrier expects it.
+            fan_mode: Optional fan mode to include in the manual activity update.
+
+        Returns:
+            The decoded mutation response.
+
+        Raises:
+            ValueError: If ``fan_mode`` is supplied and is not a valid enum
+                member.
+        """
         variables = {
             "input": {
                 "serial": system_serial,

@@ -1,7 +1,10 @@
+"""Tests for configuration schedule behavior."""
+
 from carrier_api.config import ConfigZone
 
 
 def test_current_activity_returns_none_when_no_periods_are_active() -> None:
+    """Return no current activity when today and yesterday have no active periods."""
     zone = ConfigZone(
         zone_json={
             "id": "1",

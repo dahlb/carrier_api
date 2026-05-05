@@ -1,3 +1,5 @@
+"""Carrier system profile model."""
+
 from logging import getLogger
 from .util import safely_get_json_value
 
@@ -5,6 +7,8 @@ _LOGGER = getLogger(__name__)
 
 
 class Profile:
+    """Static identity and equipment metadata for a Carrier system."""
+
     model: str | None = None
     brand: str | None = None
     firmware: str | None = None
@@ -20,6 +24,11 @@ class Profile:
         self,
         raw: dict,
     ):
+        """Build a system profile from Carrier GraphQL profile data.
+
+        Args:
+            raw: Raw ``profile`` object returned by the Carrier GraphQL API.
+        """
         self.raw = raw
         self.name: str = safely_get_json_value(raw, "name")
         self.serial: str = safely_get_json_value(raw, "serial")
@@ -35,6 +44,11 @@ class Profile:
         self.outdoor_unit_type = safely_get_json_value(self.raw, "odutype")
 
     def __repr__(self):
+        """Return a dictionary representation suitable for logs and debugging.
+
+        Returns:
+            A dictionary containing equipment identity and model metadata.
+        """
         return {
             "model": self.model,
             "brand": self.brand,
@@ -49,4 +63,9 @@ class Profile:
         }
 
     def __str__(self):
+        """Return a readable string representation of the profile.
+
+        Returns:
+            The profile representation converted to a string.
+        """
         return str(self.__repr__())

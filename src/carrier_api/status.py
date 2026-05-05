@@ -1,3 +1,5 @@
+"""Current operational status models for Carrier systems and zones."""
+
 from logging import getLogger
 from dateutil.parser import isoparse
 from datetime import datetime
@@ -9,7 +11,14 @@ _LOGGER = getLogger(__name__)
 
 
 class StatusZone:
+    """Runtime status for a single Carrier zone."""
+
     def __init__(self, status_zone_json: dict):
+        """Build zone status from a Carrier status zone payload.
+
+        Args:
+            status_zone_json: Raw zone object from the Carrier status response.
+        """
         self.api_id = safely_get_json_value(status_zone_json, "id", str)
         self.name: str = safely_get_json_value(status_zone_json, "name")
         self.current_activity: ActivityTypes = ActivityTypes(status_zone_json["currentActivity"])
@@ -26,6 +35,14 @@ class StatusZone:
 
     @property
     def zone_conditioning_const(self) -> SystemModes:
+        """Map Carrier zone conditioning text to a system mode constant.
+
+        Returns:
+            The heating, cooling, or off system mode implied by the zone state.
+
+        Raises:
+            ValueError: If Carrier reports an unknown conditioning value.
+        """
         match self.conditioning:
             case "active_heat" | "prep_heat" | "pending_heat":
                 return SystemModes.HEAT
@@ -36,6 +53,11 @@ class StatusZone:
         raise ValueError(f"Unknown conditioning: {self.conditioning}")
 
     def __repr__(self):
+        """Return a dictionary representation of zone runtime status.
+
+        Returns:
+            A dictionary containing sensor values, set points, and hold state.
+        """
         return {
             "id": self.api_id,
             "name": self.name,
@@ -52,10 +74,17 @@ class StatusZone:
         }
 
     def __str__(self):
+        """Return a readable string representation of the zone status.
+
+        Returns:
+            The zone status representation converted to a string.
+        """
         return str(self.__repr__())
 
 
 class Status:
+    """Runtime operating status for a Carrier system."""
+
     outdoor_temperature: int | None = None
     mode: str | None = None
     temperature_unit: TemperatureUnits
@@ -76,6 +105,11 @@ class Status:
         self,
         raw: dict,
     ):
+        """Build system status from a Carrier GraphQL status payload.
+
+        Args:
+            raw: Raw ``status`` object returned by the Carrier GraphQL API.
+        """
         self.raw = raw
         self.outdoor_temperature: float = safely_get_json_value(self.raw, "oat", float)
         self.mode: str = safely_get_json_value(self.raw, "mode")
@@ -99,6 +133,14 @@ class Status:
 
     @property
     def mode_const(self) -> SystemModes:
+        """Map Carrier operating mode text to a system mode constant.
+
+        Returns:
+            The heating or cooling mode implied by the Carrier status value.
+
+        Raises:
+            ValueError: If Carrier reports an unknown operating mode.
+        """
         match self.mode:
             case "gasheat" | "electric" | "hpheat":
                 return SystemModes.HEAT
@@ -107,6 +149,11 @@ class Status:
         raise ValueError(f"Unknown mode: {self.mode}")
 
     def __repr__(self):
+        """Return a dictionary representation of system runtime status.
+
+        Returns:
+            A dictionary containing system-level status and enabled zone states.
+        """
         return {
             "outdoor_temperature": self.outdoor_temperature,
             "mode": self.mode,
@@ -126,4 +173,9 @@ class Status:
         }
 
     def __str__(self):
+        """Return a readable string representation of the status model.
+
+        Returns:
+            The status representation converted to a string.
+        """
         return str(self.__repr__())

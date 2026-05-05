@@ -1,3 +1,5 @@
+"""Energy configuration and usage models for Carrier systems."""
+
 from logging import getLogger
 
 from .util import safely_get_json_value
@@ -6,7 +8,15 @@ _LOGGER = getLogger(__name__)
 
 
 class EnergyMeasurement:
+    """Energy usage totals for a single Carrier reporting period."""
+
     def __init__(self, energy_measurement_json: dict):
+        """Build an energy measurement from a Carrier energy period payload.
+
+        Args:
+            energy_measurement_json: Raw ``energyPeriods`` entry from the Carrier
+                GraphQL API.
+        """
         self.api_id = safely_get_json_value(energy_measurement_json, "energyPeriodType")
         self.cooling: int = safely_get_json_value(energy_measurement_json, "coolingKwh", int)
         self.hp_heat: int = safely_get_json_value(energy_measurement_json, "hPHeatKwh", int)
@@ -18,6 +28,11 @@ class EnergyMeasurement:
         self.loop_pump: int = safely_get_json_value(energy_measurement_json, "loopPumpKwh", int)
 
     def __repr__(self):
+        """Return a dictionary representation of the usage measurement.
+
+        Returns:
+            A dictionary containing kWh usage by energy category.
+        """
         return {
             "id": self.api_id,
             "cooling": self.cooling,
@@ -31,10 +46,17 @@ class EnergyMeasurement:
         }
 
     def __str__(self):
+        """Return a readable string representation of the usage measurement.
+
+        Returns:
+            The measurement representation converted to a string.
+        """
         return str(self.__repr__())
 
 
 class Energy:
+    """Energy feature flags and usage periods for a Carrier system."""
+
     seer: float | None = None
     hspf: float | None = None
     cooling: bool | None = None
@@ -51,6 +73,11 @@ class Energy:
         self,
         raw: dict,
     ):
+        """Build energy state from a Carrier energy GraphQL response.
+
+        Args:
+            raw: Raw ``infinityEnergy`` object returned by the Carrier GraphQL API.
+        """
         self.raw = raw
         self.seer: int = safely_get_json_value(self.raw, "energyConfig.seer", float)
         self.hspf: float = safely_get_json_value(self.raw, "energyConfig.hspf", float)
@@ -83,12 +110,23 @@ class Energy:
             self.periods.append(EnergyMeasurement(period_json))
 
     def current_year_measurements(self) -> EnergyMeasurement | None:
+        """Find the energy totals for the current-year reporting period.
+
+        Returns:
+            The measurement whose Carrier period identifier is ``year1``, or
+            ``None`` when the payload does not contain that period.
+        """
         for period in self.periods or []:
             if period.api_id == "year1":
                 return period
         return None
 
     def __repr__(self):
+        """Return a dictionary representation of energy configuration and usage.
+
+        Returns:
+            A dictionary containing energy feature availability and period totals.
+        """
         return {
             "seer": self.seer,
             "hspf": self.hspf,
@@ -104,4 +142,9 @@ class Energy:
         }
 
     def __str__(self):
+        """Return a readable string representation of the energy model.
+
+        Returns:
+            The energy representation converted to a string.
+        """
         return str(self.__repr__())

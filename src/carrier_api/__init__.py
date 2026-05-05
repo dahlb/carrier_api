@@ -1,3 +1,5 @@
+"""Public package exports for the Carrier Infinity API client."""
+
 from .errors import BaseError, AuthError
 from .const import FanModes, ActivityTypes, SystemModes, TemperatureUnits
 from .api_connection_graphql import ApiConnectionGraphql

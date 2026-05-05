@@ -1,3 +1,5 @@
+"""Websocket listener and callback manager for Carrier realtime messages."""
+
 from __future__ import annotations
 
 from asyncio import CancelledError, Task, create_task, current_task, sleep
@@ -17,7 +19,15 @@ AsyncCallback = Callable[[str], Awaitable[None]]
 
 
 class ApiWebsocket:
+    """Manage Carrier realtime websocket connection state and callbacks."""
+
     def __init__(self, api_connection_graphql: ApiConnectionGraphql) -> None:
+        """Create a websocket manager bound to a GraphQL API connection.
+
+        Args:
+            api_connection_graphql: Authenticated API connection used for token
+                refresh and websocket session creation.
+        """
         self.websocket: ClientWebSocketResponse | None = None
         self.running: bool | None = None
         self.async_callbacks: list[AsyncCallback] = []
@@ -27,12 +37,31 @@ class ApiWebsocket:
         self.api_connection_graphql.api_websocket = self
 
     def callback_add(self, async_callback: AsyncCallback) -> None:
+        """Register an async callback for incoming text messages.
+
+        Args:
+            async_callback: Coroutine function that receives the raw websocket
+                message text.
+        """
         self.async_callbacks.append(async_callback)
 
     def callback_remove(self, async_callback: AsyncCallback) -> None:
+        """Remove a previously registered async callback.
+
+        Args:
+            async_callback: Callback previously added with ``callback_add``.
+
+        Raises:
+            ValueError: If the callback is not currently registered.
+        """
         self.async_callbacks.remove(async_callback)
 
     async def loop_heartbeat(self) -> None:
+        """Send keepalive messages until the heartbeat task is cancelled.
+
+        The Carrier websocket expects periodic keepalive frames. This loop logs
+        transient send failures and exits cleanly when asyncio cancels the task.
+        """
         task_name = "unknown"
         current_task_instance = current_task()
         if current_task_instance is not None:
@@ -52,11 +81,18 @@ class ApiWebsocket:
             await sleep(55)
 
     async def create_task_heartbeat(self) -> None:
+        """Start the background websocket heartbeat task."""
         self.task_heartbeat = create_task(
             self.loop_heartbeat(), name=f"carrier_api_ws_heartbeat:{random()}"
         )
 
     async def listener(self) -> None:
+        """Open the websocket and dispatch incoming text messages.
+
+        The listener refreshes authentication if needed, starts the heartbeat,
+        forwards text payloads to registered callbacks, and clears connection
+        state when the socket closes.
+        """
         await self.api_connection_graphql.check_auth_expiration()
         async with self.api_connection_graphql.api_session.ws_connect(
             f"wss://realtime.infinity.iot.carrier.com/?Token={self.api_connection_graphql.access_token}"
@@ -81,6 +117,11 @@ class ApiWebsocket:
             self.task_heartbeat = None
 
     async def loop_listener(self) -> None:
+        """Keep reconnecting the websocket listener while running is enabled.
+
+        Cancellation stops the loop. Other listener errors are logged so a later
+        loop iteration can retry the websocket connection.
+        """
         self.running = True
         while self.running:
             try:
@@ -94,9 +135,11 @@ class ApiWebsocket:
                 _LOGGER.exception("websocket task exception", exc_info=websocket_error)
 
     async def create_task_listener(self) -> None:
+        """Start the background websocket listener task."""
         self.task_listener = create_task(self.loop_listener(), name="carrier_api_ws")
 
     async def send_reconcile(self) -> None:
+        """Request a Carrier realtime state reconciliation when connected."""
         if self.websocket is not None:
             await self.websocket.send_json({"action": "reconcile"})
             _LOGGER.debug("ws: reconciled")
