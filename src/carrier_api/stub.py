@@ -7,11 +7,11 @@ import sys
 
 import asyncio
 
-path_root = Path(__file__).parents[2]
-sys.path.append(str(path_root))
+path_src = Path(__file__).parents[1]
+sys.path.append(str(path_src))
 
 
-logger = logging.getLogger("src.carrier_api")
+logger = logging.getLogger("carrier_api")
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
@@ -20,9 +20,9 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
-from src.carrier_api.api_connection_graphql import ApiConnectionGraphql
-from src.carrier_api.api_websocket_data_updater import WebsocketDataUpdater
-from src.carrier_api.const import FanModes
+from carrier_api.api_connection_graphql import ApiConnectionGraphql
+from carrier_api.api_websocket_data_updater import WebsocketDataUpdater
+from carrier_api.const import FanModes
 
 
 async def main():

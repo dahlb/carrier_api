@@ -36,15 +36,21 @@ dependencies = [
 "Bug Tracker" = "https://github.com/dahlb/carrier_api/issues"
 
 [dependency-groups]
-dev = [
-    "codespell",
+lint = [
     "mypy",
     "prek",
-    "pytest",
-    "pytest-emoji",
-    "pytest-md",
     "ruff",
+]
+pytest = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pytest-timeout",
     "types-python-dateutil",
+]
+dev = [
+    { include-group = "lint" },
+    { include-group = "pytest" },
 ]
 
 [tool.setuptools]
@@ -58,7 +64,8 @@ carrier_api = ["py.typed"]
 
 [tool.mypy]
 python_version = "3.14"
-files = ["src/carrier_api"]
+files = ["src/carrier_api", "tests"]
+mypy_path = "src"
 check_untyped_defs = true
 explicit_package_bases = true
 pretty = true
@@ -139,3 +146,25 @@ convention = "google"
 
 [tool.codespell]
 ignore-words-list = "hass"
+
+[tool.pytest.ini_options]
+addopts = """
+  --quiet
+  --timeout=20
+  --durations=10
+  -o console_output_style=progress
+  --cov=carrier_api
+  --cov-report=term-missing
+  --cov-report=html
+"""
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = true
+source = ["carrier_api"]
+relative_files = true
+parallel = false
+
+[tool.coverage.report]
+show_missing = true

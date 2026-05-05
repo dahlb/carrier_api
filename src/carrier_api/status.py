@@ -58,7 +58,7 @@ class StatusZone:
 class Status:
     outdoor_temperature: int | None = None
     mode: str | None = None
-    temperature_unit: TemperatureUnits | None = None
+    temperature_unit: TemperatureUnits
     filter_used: int | None = None
     is_disconnected: bool | None = None
     airflow_cfm: int | None = None
@@ -70,7 +70,7 @@ class Status:
     outdoor_unit_operational_status: str | None = None
     indoor_unit_operational_status: str | None = None
     time_stamp: datetime | None = None
-    zones: list[StatusZone] | None = None
+    zones: list[StatusZone]
 
     def __init__(
         self,

@@ -45,7 +45,7 @@ class Energy:
     fan_gas: bool | None = None
     gas: bool | None = None
     loop_pump: bool | None = None
-    periods: list[EnergyMeasurement] | None = None
+    periods: list[EnergyMeasurement]
 
     def __init__(
         self,

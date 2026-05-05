@@ -7,7 +7,7 @@ Then use pytest to drive the tests
     $ pytest tests
 """
 
-from importlib import resources
+from typing import Any
 import json
 from pathlib import Path
 from unittest import IsolatedAsyncioTestCase
@@ -24,15 +24,19 @@ from carrier_api import (
 )
 
 
-path_root = Path(__file__).parents[1]
+FIXTURE_ROOT = Path(__file__).parent
 
 
 class WebsocketDataUpdaterTestBase(IsolatedAsyncioTestCase):
-    def setUp(self):
-        self.system_response = json.loads(
-            open(resources.files().joinpath("graphql/systems.json")).read()
-        )
-        energy_response = json.loads(open(resources.files().joinpath("graphql/energy.json")).read())
+    websocket_message_path: str
+    system_response: dict[str, Any]
+    data_updater: WebsocketDataUpdater
+    websocket_message_str: str
+    carrier_system: System
+
+    def setUp(self) -> None:
+        self.system_response = json.loads((FIXTURE_ROOT / "graphql/systems.json").read_text())
+        energy_response = json.loads((FIXTURE_ROOT / "graphql/energy.json").read_text())
         systems = []
         for system_response in self.system_response["infinitySystems"]:
             profile = Profile(raw=system_response["profile"])
@@ -41,21 +45,19 @@ class WebsocketDataUpdaterTestBase(IsolatedAsyncioTestCase):
             energy = Energy(raw=energy_response["infinityEnergy"])
             systems.append(System(profile=profile, status=status, config=config, energy=energy))
         self.data_updater = WebsocketDataUpdater(systems)
-        self.websocket_message_str = open(
-            resources.files().joinpath(self.websocket_message_path)
-        ).read()
+        self.websocket_message_str = (FIXTURE_ROOT / self.websocket_message_path).read_text()
         self.carrier_system = systems[0]
 
 
 class MessageStatusIduCfm(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/status_idu_cfm.json"
 
-    async def test_setup(self):
+    async def test_setup(self) -> None:
         assert (
             self.carrier_system.status.raw == self.system_response["infinitySystems"][0]["status"]
         )
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         assert self.carrier_system.status.airflow_cfm == 1239
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.airflow_cfm == 525
@@ -65,7 +67,7 @@ class MessageStatusIduCfm(WebsocketDataUpdaterTestBase):
 class MessageStatusOduOpmode(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/status_odu_opmode.json"
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         assert self.carrier_system.status.mode == "heat"
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.mode == "heat"
@@ -75,7 +77,7 @@ class MessageStatusOduOpmode(WebsocketDataUpdaterTestBase):
 class MessageStatusZoneRh(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/status_zone_rh.json"
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         assert self.carrier_system.status.zones[0].humidity == 32
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.zones[0].humidity == 34
@@ -85,7 +87,7 @@ class MessageStatusZoneRh(WebsocketDataUpdaterTestBase):
 class MessageStatusZoneConditioning(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/status_zone_conditioning.json"
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         assert self.carrier_system.status.zones[0].conditioning == "active_heat"
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.zones[0].conditioning == "idle"
@@ -95,7 +97,7 @@ class MessageStatusZoneConditioning(WebsocketDataUpdaterTestBase):
 class MessageStatusZoneActivity(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/status_zone_activity.json"
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
         assert self.carrier_system.status.zones[0].heat_set_point == 74
         assert self.carrier_system.status.zones[0].cool_set_point == 78
@@ -112,7 +114,7 @@ class MessageStatusZoneActivity(WebsocketDataUpdaterTestBase):
 class MessageStatusZoneActivityOnly(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/status_zone_activity_only.json"
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
         assert self.carrier_system.status.zones[0].fan == FanModes.MED
         await self.data_updater.message_handler(self.websocket_message_str)
@@ -126,7 +128,7 @@ class MessageStatusZoneActivityOnly(WebsocketDataUpdaterTestBase):
 class MessageStatusZoneHold(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/status_zone_hold.json"
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.status.zones[0].current_activity == ActivityTypes.MANUAL
@@ -137,7 +139,7 @@ class MessageStatusZoneHold(WebsocketDataUpdaterTestBase):
 class MessageStatusZoneHtsp(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/status_zone_htsp.json"
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         assert self.carrier_system.status.zones[0].heat_set_point == 74
         assert self.carrier_system.status.zones[0].cool_set_point == 78
         await self.data_updater.message_handler(self.websocket_message_str)
@@ -151,7 +153,7 @@ class MessageStatusZoneHtsp(WebsocketDataUpdaterTestBase):
 class MessageConfigZoneHold(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/config_zone_hold.json"
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         assert self.carrier_system.config.zones[0].hold_activity is None
         await self.data_updater.message_handler(self.websocket_message_str)
         assert self.carrier_system.config.zones[0].hold_activity == ActivityTypes.MANUAL
@@ -162,7 +164,7 @@ class MessageConfigZoneHold(WebsocketDataUpdaterTestBase):
 class MessageConfigZoneProgram(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/config_zone_program.json"
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         await self.data_updater.message_handler(self.websocket_message_str)
         reprocessed_config = Config(raw=self.carrier_system.config.raw)
         assert (
@@ -174,7 +176,6 @@ class MessageConfigZoneProgram(WebsocketDataUpdaterTestBase):
 class MessageHeartbeatNoDeviceId(WebsocketDataUpdaterTestBase):
     websocket_message_path = "messages/heartbeat_with_no_device_id.json"
 
-    async def test_message_handler(self):
+    async def test_message_handler(self) -> None:
         # should silently return None, not raise ValueError
-        result = await self.data_updater.message_handler(self.websocket_message_str)
-        assert result is None
+        await self.data_updater.message_handler(self.websocket_message_str)

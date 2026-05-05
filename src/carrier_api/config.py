@@ -128,7 +128,7 @@ class Config:
     etag: str | None = None
     fuel_type: str | None = None
     gas_unit: str | None = None
-    zones: list[ConfigZone] | None = None
+    zones: list[ConfigZone]
     uv_enabled: bool | None = None
     humidifier_enabled: bool | None = None
     humidifier_heat_target: int | None = None
