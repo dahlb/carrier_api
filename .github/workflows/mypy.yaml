@@ -1,32 +1,31 @@
-name: "MyPy"
+name: MyPy
 
 on:
-  push:
-    branches:
-      - "main"
   pull_request:
     branches:
-    types:
-      - opened
-      - edited
-      - synchronize
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   mypy:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.13"]
     steps:
-      - uses: actions/checkout@v6
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: developer mode install  # to pull in all dependencies.
-        run: pip install -e .
-      - name: Install mypy dependencies
-        run: pip install mypy types-python-dateutil
-      - name: Runs mypy
-        run: mypy src/carrier_api --explicit-package-bases
+          python-version: "3.14"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Run mypy
+        run: uv run --group dev mypy

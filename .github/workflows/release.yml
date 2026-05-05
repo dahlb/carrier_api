@@ -5,72 +5,81 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  id-token: write
+
 jobs:
   build:
+    if: github.event.repository.fork == false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout the repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-      - name: Gets semantic release info
+      - name: Get semantic release info
         id: semantic_release_info
-        uses: jossef/action-semantic-release-info@v3.0.0
+        uses: cycjimmy/semantic-release-action@v6
+        with:
+          dry_run: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Version and Commit
-        if: ${{steps.semantic_release_info.outputs.version != ''}}
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        env:
+          NEW_VERSION: ${{ steps.semantic_release_info.outputs.new_release_version }}
         run: |
-          echo "Version: ${{steps.semantic_release_info.outputs.version}}"
-          sed -i "s/version = \".*\"/version = \"${{steps.semantic_release_info.outputs.version}}\"/g" pyproject.toml
-          git config --local user.email "dahl.brendan@gmail.com"
-          git config --local user.name "Brendan Dahl"
+          echo "Version: $NEW_VERSION"
+          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/g" pyproject.toml
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git diff
           git add -A
-          git commit -m "chore: bumping version to ${{steps.semantic_release_info.outputs.version}}"
-          git tag ${{ steps.semantic_release_info.outputs.git_tag }}
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: bumping version to $NEW_VERSION [skip ci]"
+          fi
+
+      - name: Tag release
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        env:
+          NEW_GIT_TAG: ${{ steps.semantic_release_info.outputs.new_release_git_tag }}
+        run: |
+          if ! git rev-parse -q --verify "refs/tags/$NEW_GIT_TAG" >/dev/null; then
+            git tag "$NEW_GIT_TAG"
+          fi
 
       - name: Push changes
-        if: ${{steps.semantic_release_info.outputs.version != ''}}
-        uses: ad-m/github-push-action@v1.1.0
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        uses: ad-m/github-push-action@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          tags: true
           branch: ${{ github.ref }}
+          tags: true
 
       - name: Create GitHub Release
-        if: ${{steps.semantic_release_info.outputs.version != ''}}
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.semantic_release_info.outputs.git_tag }}
-          release_name: ${{ steps.semantic_release_info.outputs.git_tag }}
-          body: ${{ steps.semantic_release_info.outputs.notes }}
+          tag_name: ${{ steps.semantic_release_info.outputs.new_release_git_tag }}
+          name: ${{ steps.semantic_release_info.outputs.new_release_git_tag }}
+          body: ${{ steps.semantic_release_info.outputs.new_release_notes }}
           draft: false
           prerelease: false
 
-      - name: Set up Python 3.9
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: 3.9
+          python-version: "3.14"
 
-      - name: Install pypa/build
-        run: >-
-          python -m
-          pip install
-          build
-          --user
+      - name: Build package
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        uses: hynek/build-and-inspect-python-package@v2
 
-      - name: Build a binary wheel and a source tarball
-        run: >-
-          python -m
-          build
-          --sdist
-          --wheel
-          --outdir dist/
-          .
-
-      - name: Publish distribution 📦 to PyPI
-        if: ${{steps.semantic_release_info.outputs.version != ''}}
-        uses: pypa/gh-action-pypi-publish@master
+      - name: Publish distribution to PyPI
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
