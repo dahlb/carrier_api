@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   build:
@@ -27,17 +26,48 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update Version and Commit
+      - name: Update version file
         if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
         env:
           NEW_VERSION: ${{ steps.semantic_release_info.outputs.new_release_version }}
         run: |
           echo "Version: $NEW_VERSION"
           sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/g" pyproject.toml
+
+      - name: Set up Python
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+
+      - name: Build package
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        uses: hynek/build-and-inspect-python-package@v2
+
+      - name: Download built package
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: Packages
+          path: dist
+
+      - name: Publish distribution to PyPI
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Update Version and Commit
+        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+        env:
+          NEW_VERSION: ${{ steps.semantic_release_info.outputs.new_release_version }}
+        run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git diff
-          git add -A
+          git add pyproject.toml
           if ! git diff --cached --quiet; then
             git commit -m "chore: bumping version to $NEW_VERSION [skip ci]"
           fi
@@ -68,18 +98,3 @@ jobs:
           body: ${{ steps.semantic_release_info.outputs.new_release_notes }}
           draft: false
           prerelease: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.14"
-
-      - name: Build package
-        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
-        uses: hynek/build-and-inspect-python-package@v2
-
-      - name: Publish distribution to PyPI
-        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}

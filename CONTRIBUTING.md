@@ -11,7 +11,7 @@ The process is straight-forward.
      - modify a stub file
      - run `python src/carrier_api/stub.py`
      - add the logging from the console to the source code
- - Create a Pull Request against the [**main**](https://github.com/dahlb/carrier_api/main) branch.
+ - Create a Pull Request against the [**main**](https://github.com/dahlb/carrier_api/tree/main) branch.
 
 ## Issues (Features/Bugs)
 

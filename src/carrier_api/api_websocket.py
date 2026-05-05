@@ -1,5 +1,5 @@
 import asyncio
-from asyncio import sleep, create_task, CancelledError, get_event_loop, current_task
+from asyncio import sleep, create_task, CancelledError, current_task
 from logging import getLogger
 from collections.abc import Callable
 from random import random
@@ -46,7 +46,7 @@ class ApiWebsocket:
             await sleep(55)
 
     async def create_task_heartbeat(self) -> None:
-        self.task_heartbeat = get_event_loop().create_task(
+        self.task_heartbeat = create_task(
             self.loop_heartbeat(), name=f"carrier_api_ws_heartbeat:{random()}"
         )
 

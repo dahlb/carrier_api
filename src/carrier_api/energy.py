@@ -82,10 +82,11 @@ class Energy:
         for period_json in self.raw["energyPeriods"]:
             self.periods.append(EnergyMeasurement(period_json))
 
-    def current_year_measurements(self):
+    def current_year_measurements(self) -> EnergyMeasurement | None:
         for period in self.periods or []:
             if period.api_id == "year1":
                 return period
+        return None
 
     def __repr__(self):
         return {

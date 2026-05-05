@@ -1,10 +1,16 @@
+from collections.abc import Callable, Mapping
 from logging import getLogger
+from typing import Any
 
 _LOGGER = getLogger(__name__)
 
 
-def safely_get_json_value(json, key, callable_to_cast=None):
-    value = json
+def safely_get_json_value(
+    json: Mapping[str, Any] | list[Any],
+    key: str,
+    callable_to_cast: Callable[[Any], Any] | None = None,
+) -> Any:
+    value: Any = json
     for x in key.split("."):
         if value is not None:
             try:

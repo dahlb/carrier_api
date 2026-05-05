@@ -5,6 +5,8 @@ src/carrier_api/stub.py
 __pycache__
 .pytest*
 *.egg-info
+/build/
+/dist/
 */build/*
 */dist/*
 .mypy_cache

@@ -68,7 +68,7 @@ class ConfigZone:
         today_schedule_json = self.program_json["day"][sunday_0_index_today]
         return active_schedule_periods(today_schedule_json["period"])
 
-    def current_activity(self) -> ConfigZoneActivity:
+    def current_activity(self) -> ConfigZoneActivity | None:
         if self.hold:
             return self.find_activity(self.hold_activity)
         else:
@@ -83,6 +83,8 @@ class ConfigZone:
                         safely_get_json_value(active_period, "activity", ActivityTypes)
                     )
             yesterday_active_periods = list(self.yesterday_active_periods())
+            if not yesterday_active_periods:
+                return None
             return self.find_activity(
                 safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityTypes)
             )
@@ -103,10 +105,11 @@ class ConfigZone:
             return None
 
     def __repr__(self):
+        current_activity = self.current_activity()
         builder = {
             "api_id": self.api_id,
             "name": self.name,
-            "current_activity": self.current_activity().__repr__(),
+            "current_activity": current_activity.__repr__() if current_activity else None,
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,

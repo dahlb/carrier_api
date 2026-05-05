@@ -16,7 +16,7 @@ class System:
         status: Status,
         config: Config,
         energy: Energy,
-    ):
+    ) -> None:
         self.profile = profile
         self.status = status
         self.energy = energy
