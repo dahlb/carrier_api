@@ -52,6 +52,8 @@ class Profile:
             A dictionary containing equipment identity and model metadata.
         """
         return {
+            "name": self.name,
+            "serial": self.serial,
             "model": self.model,
             "brand": self.brand,
             "firmware": self.firmware,

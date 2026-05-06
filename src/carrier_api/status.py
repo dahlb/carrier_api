@@ -165,6 +165,7 @@ class Status:
             A dictionary containing system-level status and enabled zone states.
         """
         return {
+            "time_stamp": self.time_stamp,
             "outdoor_temperature": self.outdoor_temperature,
             "mode": self.mode,
             "temperature_unit": self.temperature_unit.value
@@ -177,6 +178,7 @@ class Status:
             "static_pressure": self.static_pressure,
             "humidity_level": self.humidity_level,
             "humidifier_on": self.humidifier_on,
+            "uv_lamp_level": self.uv_lamp_level,
             "outdoor_unit_operational_status": self.outdoor_unit_operational_status,
             "indoor_unit_operational_status": self.indoor_unit_operational_status,
             "zones": [zone.as_dict() for zone in self.zones or []],

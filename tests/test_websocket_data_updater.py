@@ -16,6 +16,7 @@ from carrier_api import (
     System,
     WebsocketDataUpdater,
 )
+from carrier_api.api_websocket_data_updater import find_by_id
 
 FIXTURE_ROOT = Path(__file__).parent
 
@@ -109,6 +110,32 @@ def websocket_message_str(request: pytest.FixtureRequest) -> str:
     if not isinstance(message_path, str):
         raise TypeError("websocket message fixture parameter must be a string")
     return (FIXTURE_ROOT / message_path).read_text()
+
+
+def test_find_by_id_error_message_omits_collection() -> None:
+    """Raise a concise formatted error when no collection item matches."""
+    collection = [{"id": "1", "name": "Zone 1"}]
+
+    with pytest.raises(ValueError) as error:
+        find_by_id(collection, "2")
+
+    assert str(error.value) == "id: 2 not found in collection"
+    assert error.value.args == ("id: 2 not found in collection",)
+
+
+def test_carrier_system_error_message_is_formatted(
+    data_updater: WebsocketDataUpdater,
+) -> None:
+    """Raise a formatted error when no loaded system matches a serial number.
+
+    Args:
+        data_updater: A websocket data updater built from fixture systems.
+    """
+    with pytest.raises(ValueError) as error:
+        data_updater.carrier_system(serial_id="missing-serial")
+
+    assert str(error.value) == "No carrier_system found for serial missing-serial"
+    assert error.value.args == ("No carrier_system found for serial missing-serial",)
 
 
 @pytest.mark.asyncio

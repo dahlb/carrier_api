@@ -89,6 +89,8 @@ async def main() -> None:
         listener_task = create_task(listener(), name="listener")
         logger.debug("started task %s", listener_task.get_name())
 
+        if not systems:
+            raise RuntimeError("No systems available")
         zones = systems[0].config.zones
         if not zones:
             raise RuntimeError("No config zones available")

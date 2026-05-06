@@ -29,7 +29,7 @@ def find_by_id(collection: list[dict], item_id: str) -> dict:
     for item in collection:
         if str(item["id"]) == str(item_id):
             return item
-    raise ValueError("id: %s not found in list: %s", item_id, collection)
+    raise ValueError(f"id: {item_id} not found in collection")
 
 
 class WebsocketDataUpdater:
@@ -61,7 +61,7 @@ class WebsocketDataUpdater:
         for system in self.systems:
             if system.profile.serial == serial_id:
                 return system
-        raise ValueError("No carrier_system found for serial %s", serial_id)
+        raise ValueError(f"No carrier_system found for serial {serial_id}")
 
     async def message_handler(self, websocket_message: str) -> None:
         """Apply one raw Carrier websocket message to the matching system.
