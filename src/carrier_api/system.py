@@ -1,12 +1,12 @@
 """Aggregate model for a Carrier system and its related state."""
 
 from logging import getLogger
+from typing import Any
 
+from .config import Config
+from .energy import Energy
 from .profile import Profile
 from .status import Status
-from .energy import Energy
-from .config import Config
-
 
 _LOGGER = getLogger(__name__)
 
@@ -34,7 +34,7 @@ class System:
         self.energy = energy
         self.config = config
 
-    def __repr__(self):
+    def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the aggregate.
 
         Returns:
@@ -43,16 +43,24 @@ class System:
         return {
             "serial": self.profile.serial,
             "name": self.profile.name,
-            "profile": self.profile.__repr__(),
-            "status": self.status.__repr__(),
-            "config": self.config.__repr__(),
-            "energy": self.energy.__repr__(),
+            "profile": self.profile.as_dict(),
+            "status": self.status.as_dict(),
+            "config": self.config.as_dict(),
+            "energy": self.energy.as_dict(),
         }
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the system.
+
+        Returns:
+            The system dictionary representation converted to a string.
+        """
+        return str(self.as_dict())
+
+    def __str__(self) -> str:
         """Return a readable string representation of the system.
 
         Returns:
             The system representation converted to a string.
         """
-        return str(self.__repr__())
+        return str(self.as_dict())

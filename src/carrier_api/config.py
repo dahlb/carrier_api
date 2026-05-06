@@ -1,15 +1,16 @@
 """Configuration models and schedule helpers for Carrier systems."""
 
+from datetime import UTC, datetime
 from logging import getLogger
-from datetime import datetime
+from typing import Any
 
-from .const import FanModes, ActivityTypes
+from .const import ActivityTypes, FanModes
 from .util import safely_get_json_value
 
 _LOGGER = getLogger(__name__)
 
 
-def active_schedule_periods(periods_json: list[dict]):
+def active_schedule_periods(periods_json: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Filter a Carrier schedule period list down to enabled periods.
 
     Args:
@@ -26,7 +27,7 @@ def active_schedule_periods(periods_json: list[dict]):
 class ConfigZoneActivity:
     """Configured set points and fan mode for a zone activity."""
 
-    def __init__(self, zone_activity_json: dict):
+    def __init__(self, zone_activity_json: dict[str, Any]) -> None:
         """Build a zone activity from Carrier configuration data.
 
         Args:
@@ -39,7 +40,7 @@ class ConfigZoneActivity:
         self.heat_set_point: float = safely_get_json_value(zone_activity_json, "htsp", float)
         self.cool_set_point: float = safely_get_json_value(zone_activity_json, "clsp", float)
 
-    def __repr__(self):
+    def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the activity configuration.
 
         Returns:
@@ -54,19 +55,27 @@ class ConfigZoneActivity:
             "cool_set_point": self.cool_set_point,
         }
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the activity.
+
+        Returns:
+            The activity dictionary representation converted to a string.
+        """
+        return str(self.as_dict())
+
+    def __str__(self) -> str:
         """Return a readable string representation of the activity.
 
         Returns:
             The activity representation converted to a string.
         """
-        return str(self.__repr__())
+        return str(self.as_dict())
 
 
 class ConfigZone:
     """Configurable schedule, hold, and activity settings for one zone."""
 
-    def __init__(self, zone_json: dict, vacation_json: dict):
+    def __init__(self, zone_json: dict[str, Any], vacation_json: dict[str, Any]) -> None:
         """Build zone configuration from Carrier zone and vacation settings.
 
         Args:
@@ -104,26 +113,26 @@ class ConfigZone:
                 return activity
         return None
 
-    def yesterday_active_periods(self):
+    def yesterday_active_periods(self) -> list[dict[str, Any]]:
         """Return enabled schedule periods for yesterday.
 
         Returns:
             Enabled schedule periods from the zone's previous schedule day,
             using the local system date to select the day.
         """
-        now = datetime.now()
+        now = datetime.now(UTC).astimezone()
         sunday_0_index_today = int(now.date().strftime("%w"))
         yesterday_schedule = self.program_json["day"][(sunday_0_index_today + 8) % 7]
         return active_schedule_periods(yesterday_schedule["period"])
 
-    def today_active_periods(self):
+    def today_active_periods(self) -> list[dict[str, Any]]:
         """Return enabled schedule periods for today.
 
         Returns:
             Enabled schedule periods from the zone's current schedule day,
             using the local system date to select the day.
         """
-        now = datetime.now()
+        now = datetime.now(UTC).astimezone()
         sunday_0_index_today = int(now.date().strftime("%w"))
         today_schedule_json = self.program_json["day"][sunday_0_index_today]
         return active_schedule_periods(today_schedule_json["period"])
@@ -142,23 +151,20 @@ class ConfigZone:
         """
         if self.hold:
             return self.find_activity(self.hold_activity)
-        else:
-            now = datetime.now()
-            reversed_active_periods = reversed(self.today_active_periods())
-            for active_period in reversed_active_periods:
-                hours, minutes = active_period["time"].split(":")
-                if (int(hours) < now.hour) or (
-                    int(hours) == now.hour and int(minutes) < now.minute
-                ):
-                    return self.find_activity(
-                        safely_get_json_value(active_period, "activity", ActivityTypes)
-                    )
-            yesterday_active_periods = list(self.yesterday_active_periods())
-            if not yesterday_active_periods:
-                return None
-            return self.find_activity(
-                safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityTypes)
-            )
+        now = datetime.now(UTC).astimezone()
+        reversed_active_periods = reversed(self.today_active_periods())
+        for active_period in reversed_active_periods:
+            hours, minutes = active_period["time"].split(":")
+            if (int(hours) < now.hour) or (int(hours) == now.hour and int(minutes) < now.minute):
+                return self.find_activity(
+                    safely_get_json_value(active_period, "activity", ActivityTypes)
+                )
+        yesterday_active_periods = list(self.yesterday_active_periods())
+        if not yesterday_active_periods:
+            return None
+        return self.find_activity(
+            safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityTypes)
+        )
 
     def next_activity_time(self) -> str | None:
         """Find the next scheduled activity start time.
@@ -167,7 +173,7 @@ class ConfigZone:
             The next enabled period time from today, the first enabled period
             from tomorrow, or ``None`` when neither day has enabled periods.
         """
-        now = datetime.now()
+        now = datetime.now(UTC).astimezone()
         sunday_0_index_today = int(now.date().strftime("%w"))
         active_periods = self.today_active_periods()
         for active_period in active_periods:
@@ -178,10 +184,9 @@ class ConfigZone:
         tomorrow_active_schedule_periods = active_schedule_periods(tomorrow_schedule["period"])
         if len(tomorrow_active_schedule_periods) > 0:
             return tomorrow_active_schedule_periods[0]["time"]
-        else:
-            return None
+        return None
 
-    def __repr__(self):
+    def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the zone configuration.
 
         Returns:
@@ -192,24 +197,32 @@ class ConfigZone:
         builder = {
             "api_id": self.api_id,
             "name": self.name,
-            "current_activity": current_activity.__repr__() if current_activity else None,
+            "current_activity": current_activity.as_dict() if current_activity else None,
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,
             "occupancy_enabled": self.occupancy_enabled,
-            "activities": [activity.__repr__() for activity in self.activities],
+            "activities": [activity.as_dict() for activity in self.activities],
         }
         if self.hold_activity is not None:
             builder["hold_activity"] = self.hold_activity.value
         return builder
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the zone configuration.
+
+        Returns:
+            The zone configuration dictionary representation converted to a string.
+        """
+        return str(self.as_dict())
+
+    def __str__(self) -> str:
         """Return a readable string representation of the zone configuration.
 
         Returns:
             The zone configuration representation converted to a string.
         """
-        return str(self.__repr__())
+        return str(self.as_dict())
 
 
 class Config:
@@ -228,8 +241,8 @@ class Config:
 
     def __init__(
         self,
-        raw: dict,
-    ):
+        raw: dict[str, Any],
+    ) -> None:
         """Build system configuration from a Carrier GraphQL config payload.
 
         Args:
@@ -258,7 +271,7 @@ class Config:
             if safely_get_json_value(zone_json, "enabled") == "on":
                 self.zones.append(ConfigZone(zone_json=zone_json, vacation_json=vacation_json))
 
-    def __repr__(self):
+    def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the system configuration.
 
         Returns:
@@ -268,13 +281,21 @@ class Config:
             "temperature_unit": self.temperature_unit,
             "mode": self.mode,
             "heat_source": self.heat_source,
-            "zones": [zone.__repr__() for zone in self.zones or []],
+            "zones": [zone.as_dict() for zone in self.zones or []],
         }
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the configuration.
+
+        Returns:
+            The configuration dictionary representation converted to a string.
+        """
+        return str(self.as_dict())
+
+    def __str__(self) -> str:
         """Return a readable string representation of the configuration.
 
         Returns:
             The configuration representation converted to a string.
         """
-        return str(self.__repr__())
+        return str(self.as_dict())

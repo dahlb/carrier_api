@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
@@ -17,7 +17,6 @@ from carrier_api import (
     WebsocketDataUpdater,
 )
 
-
 FIXTURE_ROOT = Path(__file__).parent
 
 
@@ -28,7 +27,10 @@ def system_response() -> dict[str, Any]:
     Returns:
         The parsed systems response fixture.
     """
-    return cast(dict[str, Any], json.loads((FIXTURE_ROOT / "graphql/systems.json").read_text()))
+    response = json.loads((FIXTURE_ROOT / "graphql/systems.json").read_text())
+    if not isinstance(response, dict):
+        raise TypeError("systems fixture must contain a JSON object")
+    return response
 
 
 @pytest.fixture
@@ -38,7 +40,10 @@ def energy_response() -> dict[str, Any]:
     Returns:
         The parsed energy response fixture.
     """
-    return cast(dict[str, Any], json.loads((FIXTURE_ROOT / "graphql/energy.json").read_text()))
+    response = json.loads((FIXTURE_ROOT / "graphql/energy.json").read_text())
+    if not isinstance(response, dict):
+        raise TypeError("energy fixture must contain a JSON object")
+    return response
 
 
 @pytest.fixture
@@ -100,7 +105,9 @@ def websocket_message_str(request: pytest.FixtureRequest) -> str:
     Returns:
         The raw websocket message fixture contents.
     """
-    message_path = cast(str, request.param)
+    message_path = request.param
+    if not isinstance(message_path, str):
+        raise TypeError("websocket message fixture parameter must be a string")
     return (FIXTURE_ROOT / message_path).read_text()
 
 

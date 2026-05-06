@@ -1,15 +1,14 @@
 """Tests for websocket connection state isolation."""
 
-from collections.abc import Awaitable, Callable
-from typing import Any, cast
-
-from carrier_api import ApiWebsocket
+from carrier_api import ApiConnectionGraphql, ApiWebsocket
 
 
-class DummyApiConnectionGraphql:
+class DummyApiConnectionGraphql(ApiConnectionGraphql):
     """Minimal API connection stand-in used to construct websocket managers."""
 
-    api_websocket: ApiWebsocket | None = None
+    def __init__(self) -> None:
+        """Initialize only the websocket attribute needed by the constructor."""
+        self.api_websocket: ApiWebsocket | None = None
 
 
 async def websocket_callback(_message: str) -> None:
@@ -22,11 +21,10 @@ async def websocket_callback(_message: str) -> None:
 
 def test_callbacks_are_instance_scoped() -> None:
     """Ensure callbacks registered on one websocket do not leak to another instance."""
-    first_websocket = ApiWebsocket(cast(Any, DummyApiConnectionGraphql()))
-    second_websocket = ApiWebsocket(cast(Any, DummyApiConnectionGraphql()))
-    callback = cast(Callable[[str], Awaitable[None]], websocket_callback)
+    first_websocket = ApiWebsocket(DummyApiConnectionGraphql())
+    second_websocket = ApiWebsocket(DummyApiConnectionGraphql())
 
-    first_websocket.callback_add(callback)
+    first_websocket.callback_add(websocket_callback)
 
-    assert first_websocket.async_callbacks == [callback]
+    assert first_websocket.async_callbacks == [websocket_callback]
     assert second_websocket.async_callbacks == []

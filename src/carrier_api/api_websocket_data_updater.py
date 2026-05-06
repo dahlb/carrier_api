@@ -1,22 +1,24 @@
 """Apply Carrier realtime websocket messages to in-memory system models."""
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from json import loads
-from deepmerge import always_merger
 from logging import getLogger
-from .system import System
-from .status import Status
+
+from deepmerge import always_merger
+
 from .config import Config
+from .status import Status
+from .system import System
 
 _LOGGER = getLogger(__name__)
 
 
-def find_by_id(collection: list[dict], id: str) -> dict:
+def find_by_id(collection: list[dict], item_id: str) -> dict:
     """Find an item in a Carrier payload collection by id.
 
     Args:
         collection: List of dictionaries containing Carrier ``id`` fields.
-        id: Identifier to match, compared as a string for API consistency.
+        item_id: Identifier to match, compared as a string for API consistency.
 
     Returns:
         The matching dictionary from the collection.
@@ -25,9 +27,9 @@ def find_by_id(collection: list[dict], id: str) -> dict:
         ValueError: If no item in the collection has the requested id.
     """
     for item in collection:
-        if str(item["id"]) == str(id):
+        if str(item["id"]) == str(item_id):
             return item
-    raise ValueError("id: %s not found in list: %s", id, collection)
+    raise ValueError("id: %s not found in list: %s", item_id, collection)
 
 
 class WebsocketDataUpdater:
@@ -36,7 +38,7 @@ class WebsocketDataUpdater:
     def __init__(
         self,
         systems: list[System],
-    ):
+    ) -> None:
         """Create a data updater for a set of Carrier systems.
 
         Args:

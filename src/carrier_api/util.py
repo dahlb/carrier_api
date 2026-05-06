@@ -48,7 +48,7 @@ def safely_get_json_value(
     if callable_to_cast is not None and value is not None:
         try:
             value = callable_to_cast(value)
-        except ValueError as error:
-            _LOGGER.exception(error)
+        except ValueError:
+            _LOGGER.exception("Unable to cast JSON value")
             value = None
     return value

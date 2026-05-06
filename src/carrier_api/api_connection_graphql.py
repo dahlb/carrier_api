@@ -1,26 +1,21 @@
 """GraphQL client for Carrier authentication, queries, and config updates."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from logging import getLogger
 from typing import Any, Literal
 
 from aiohttp import ClientSession
-from gql import Client, gql, GraphQLRequest
+from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
-from .const import (
-    FanModes,
-    ActivityTypes,
-    HeatSourceTypes,
-    SystemModes,
-)
+from .api_websocket import ApiWebsocket
+from .config import Config
+from .const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from .energy import Energy
+from .errors import AuthError
 from .profile import Profile
 from .status import Status
-from .config import Config
-from .errors import AuthError
 from .system import System
-from .api_websocket import ApiWebsocket
 
 _LOGGER = getLogger(__name__)
 
@@ -28,7 +23,7 @@ _LOGGER = getLogger(__name__)
 class ApiConnectionGraphql:
     """Async Carrier GraphQL API connection with token and websocket support."""
 
-    expires_at: datetime = datetime.now()
+    expires_at: datetime = datetime.now(UTC)
     refresh_token: str | None = None
     token_type: str | None = None
     access_token: str | None = None
@@ -39,7 +34,7 @@ class ApiConnectionGraphql:
         username: str,
         password: str,
         client_session: ClientSession | None = None,
-    ):
+    ) -> None:
         """Create a Carrier GraphQL API connection.
 
         Args:
@@ -99,7 +94,7 @@ class ApiConnectionGraphql:
             )
             success = result["assistedLogin"]["success"]
             if success:
-                self.expires_at = datetime.now() + timedelta(
+                self.expires_at = datetime.now(UTC) + timedelta(
                     seconds=result["assistedLogin"]["data"]["expires_in"]
                 )
                 self.token_type = result["assistedLogin"]["data"]["token_type"]
@@ -114,7 +109,7 @@ class ApiConnectionGraphql:
         """Ensure the connection has a valid access token before API use."""
         if self.refresh_token is None:
             await self.login()
-        if self.expires_at < datetime.now():
+        if self.expires_at < datetime.now(UTC):
             await self.refresh_auth_token()
 
     async def refresh_auth_token(self) -> None:
@@ -133,7 +128,7 @@ class ApiConnectionGraphql:
         response = await self.api_session.post(url=url, data=json_body)
         response.raise_for_status()
         data = await response.json()
-        self.expires_at = datetime.now() + timedelta(seconds=data["expires_in"])
+        self.expires_at = datetime.now(UTC) + timedelta(seconds=data["expires_in"])
         self.token_type = data["token_type"]
         self.access_token = data["access_token"]
         self.refresh_token = data["refresh_token"]
@@ -174,7 +169,13 @@ class ApiConnectionGraphql:
         operation_name = "getUser"
         query = gql(
             """
-            query getUser($userName: String!, $appVersion: String, $brand: String, $os: String, $osVersion: String) {
+            query getUser(
+                $userName: String!,
+                $appVersion: String,
+                $brand: String,
+                $os: String,
+                $osVersion: String
+            ) {
                 user(
                     userName: $userName
                     appVersion: $appVersion
@@ -454,9 +455,9 @@ class ApiConnectionGraphql:
         Returns:
             A list of fully constructed system aggregates for the account.
         """
-        system_response = await self.get_systems()
+        systems_response = await self.get_systems()
         systems = []
-        for system_response in system_response["infinitySystems"]:
+        for system_response in systems_response["infinitySystems"]:
             profile = Profile(raw=system_response["profile"])
             status = Status(raw=system_response["status"])
             config = Config(raw=system_response["config"])
@@ -483,7 +484,7 @@ class ApiConnectionGraphql:
             }
             """
         )
-        _LOGGER.debug(f"updateInfinityConfig: {variables}")
+        _LOGGER.debug("updateInfinityConfig: %s", variables)
         response = await self.authed_query(
             operation_name="updateInfinityConfig", query=query, variable_values=variables
         )
@@ -512,7 +513,7 @@ class ApiConnectionGraphql:
             }
             """
         )
-        _LOGGER.debug(f"updateInfinityZoneActivity: {variables}")
+        _LOGGER.debug("updateInfinityZoneActivity: %s", variables)
         response = await self.authed_query(
             operation_name="updateInfinityZoneActivity", query=query, variable_values=variables
         )
@@ -540,7 +541,7 @@ class ApiConnectionGraphql:
             }
             """
         )
-        _LOGGER.debug(f"updateInfinityZoneConfig: {variables}")
+        _LOGGER.debug("updateInfinityZoneConfig: %s", variables)
         response = await self.authed_query(
             operation_name="updateInfinityZoneConfig", query=query, variable_values=variables
         )
@@ -619,26 +620,8 @@ class ApiConnectionGraphql:
         system_serial: str,
         humidifier_on: bool | None = None,
         over_cooling: bool | None = None,
-        cooling_percent: Literal[5]
-        | Literal[10]
-        | Literal[15]
-        | Literal[20]
-        | Literal[25]
-        | Literal[30]
-        | Literal[35]
-        | Literal[40]
-        | Literal[45]
-        | None = None,
-        heating_percent: Literal[5]
-        | Literal[10]
-        | Literal[15]
-        | Literal[20]
-        | Literal[25]
-        | Literal[30]
-        | Literal[35]
-        | Literal[40]
-        | Literal[45]
-        | None = None,
+        cooling_percent: Literal[5, 10, 15, 20, 25, 30, 35, 40, 45] | None = None,
+        heating_percent: Literal[5, 10, 15, 20, 25, 30, 35, 40, 45] | None = None,
     ) -> dict[str, Any]:
         """Update home-mode humidifier and dehumidification settings.
 
@@ -716,7 +699,7 @@ class ApiConnectionGraphql:
         zone_id: str,
         activity_type: ActivityTypes,
         hold_until: str | None = None,
-    ):
+    ) -> dict[str, Any]:
         """Place a zone on hold for a selected activity.
 
         Args:
@@ -745,7 +728,7 @@ class ApiConnectionGraphql:
         }
         return await self._update_infinity_zone_config(variables=variables)
 
-    async def resume_schedule(self, system_serial: str, zone_id: str):
+    async def resume_schedule(self, system_serial: str, zone_id: str) -> dict[str, Any]:
         """Clear a zone hold and resume its programmed schedule.
 
         Args:
@@ -773,7 +756,7 @@ class ApiConnectionGraphql:
         heat_set_point: str,
         cool_set_point: str,
         fan_mode: FanModes | None = None,
-    ):
+    ) -> dict[str, Any]:
         """Update a zone's manual activity set points and optional fan mode.
 
         Args:

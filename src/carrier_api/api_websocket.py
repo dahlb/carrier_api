@@ -71,9 +71,9 @@ class ApiWebsocket:
             try:
                 if self.websocket is not None:
                     await self.websocket.send_json({"action": "keepalive"})
-                    _LOGGER.debug(f"ws: kept alive in {task_name}")
+                    _LOGGER.debug("ws: kept alive in %s", task_name)
                 else:
-                    _LOGGER.debug(f"ws: keep alive skipped as no socket available in {task_name}")
+                    _LOGGER.debug("ws: keep alive skipped as no socket available in %s", task_name)
             except CancelledError:
                 running = False
             except Exception as error:
@@ -105,9 +105,8 @@ class ApiWebsocket:
                         if msg.data == "close cmd":
                             await self.websocket.close()
                             break
-                        else:
-                            for async_callback in self.async_callbacks:
-                                await async_callback(msg.data)
+                        for async_callback in self.async_callbacks:
+                            await async_callback(msg.data)
                     elif msg.type == WSMsgType.ERROR:
                         break
             _LOGGER.debug("ws: closed")

@@ -3,13 +3,12 @@
 Run with ``python3 src/carrier_api/stub.py`` from the repository root.
 """
 
-import logging
-from asyncio import sleep, create_task
+import asyncio
+from asyncio import create_task, sleep
 from getpass import getpass
+import logging
 from pathlib import Path
 import sys
-
-import asyncio
 
 path_src = Path(__file__).parents[1]
 sys.path.append(str(path_src))
@@ -29,7 +28,28 @@ from carrier_api.api_websocket_data_updater import WebsocketDataUpdater
 from carrier_api.const import FanModes
 
 
-async def main():
+async def read_input(prompt: str) -> str:
+    """Read terminal input without blocking the event loop.
+
+    Args:
+        prompt: Prompt to display to the user.
+
+    Returns:
+        The entered input text.
+    """
+    return await asyncio.to_thread(input, prompt)
+
+
+async def read_password() -> str:
+    """Read a password without blocking the event loop.
+
+    Returns:
+        The password entered by the user.
+    """
+    return await asyncio.to_thread(getpass)
+
+
+async def main() -> None:
     """Log in, load systems, start websocket updates, and send one manual update.
 
     The script prompts for Carrier credentials, prints the loaded systems,
@@ -37,18 +57,18 @@ async def main():
     first configured zone, and then keeps the process alive long enough to watch
     realtime messages.
     """
-    username = input("username: ")
-    password = getpass()
+    username = await read_input("username: ")
+    password = await read_password()
     api_connection = None
     try:
         api_connection = ApiConnectionGraphql(username=username, password=password)
         systems = await api_connection.load_data()
-        print([system.__repr__() for system in systems])
+        print([system.as_dict() for system in systems])
 
-        async def listener():
+        async def listener() -> None:
             """Register websocket callbacks and start the listener task."""
 
-            async def output(message):
+            async def output(message: str) -> None:
                 """Print current in-memory systems after a websocket message.
 
                 Args:
@@ -56,7 +76,7 @@ async def main():
                         inspect the payload because the data updater callback has
                         already merged it into the shared system objects.
                 """
-                print([system.__repr__() for system in systems])
+                print([system.as_dict() for system in systems])
 
             ws_data_updater = WebsocketDataUpdater(systems=systems)
             api_websocket = api_connection.api_websocket

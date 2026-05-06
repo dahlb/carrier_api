@@ -1,10 +1,12 @@
 """Current operational status models for Carrier systems and zones."""
 
-from logging import getLogger
-from dateutil.parser import isoparse
 from datetime import datetime
+from logging import getLogger
+from typing import Any
 
-from .const import SystemModes, TemperatureUnits, FanModes, ActivityTypes
+from dateutil.parser import isoparse
+
+from .const import ActivityTypes, FanModes, SystemModes, TemperatureUnits
 from .util import safely_get_json_value
 
 _LOGGER = getLogger(__name__)
@@ -13,7 +15,7 @@ _LOGGER = getLogger(__name__)
 class StatusZone:
     """Runtime status for a single Carrier zone."""
 
-    def __init__(self, status_zone_json: dict):
+    def __init__(self, status_zone_json: dict[str, Any]) -> None:
         """Build zone status from a Carrier status zone payload.
 
         Args:
@@ -52,7 +54,7 @@ class StatusZone:
                 return SystemModes.OFF
         raise ValueError(f"Unknown conditioning: {self.conditioning}")
 
-    def __repr__(self):
+    def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of zone runtime status.
 
         Returns:
@@ -73,13 +75,21 @@ class StatusZone:
             "conditioning": self.conditioning,
         }
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the zone status.
+
+        Returns:
+            The zone status dictionary representation converted to a string.
+        """
+        return str(self.as_dict())
+
+    def __str__(self) -> str:
         """Return a readable string representation of the zone status.
 
         Returns:
             The zone status representation converted to a string.
         """
-        return str(self.__repr__())
+        return str(self.as_dict())
 
 
 class Status:
@@ -103,8 +113,8 @@ class Status:
 
     def __init__(
         self,
-        raw: dict,
-    ):
+        raw: dict[str, Any],
+    ) -> None:
         """Build system status from a Carrier GraphQL status payload.
 
         Args:
@@ -148,7 +158,7 @@ class Status:
                 return SystemModes.COOL
         raise ValueError(f"Unknown mode: {self.mode}")
 
-    def __repr__(self):
+    def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of system runtime status.
 
         Returns:
@@ -169,13 +179,21 @@ class Status:
             "humidifier_on": self.humidifier_on,
             "outdoor_unit_operational_status": self.outdoor_unit_operational_status,
             "indoor_unit_operational_status": self.indoor_unit_operational_status,
-            "zones": [zone.__repr__() for zone in self.zones or []],
+            "zones": [zone.as_dict() for zone in self.zones or []],
         }
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the status model.
+
+        Returns:
+            The status dictionary representation converted to a string.
+        """
+        return str(self.as_dict())
+
+    def __str__(self) -> str:
         """Return a readable string representation of the status model.
 
         Returns:
             The status representation converted to a string.
         """
-        return str(self.__repr__())
+        return str(self.as_dict())

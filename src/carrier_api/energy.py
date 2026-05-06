@@ -1,6 +1,7 @@
 """Energy configuration and usage models for Carrier systems."""
 
 from logging import getLogger
+from typing import Any
 
 from .util import safely_get_json_value
 
@@ -10,7 +11,7 @@ _LOGGER = getLogger(__name__)
 class EnergyMeasurement:
     """Energy usage totals for a single Carrier reporting period."""
 
-    def __init__(self, energy_measurement_json: dict):
+    def __init__(self, energy_measurement_json: dict[str, Any]) -> None:
         """Build an energy measurement from a Carrier energy period payload.
 
         Args:
@@ -27,7 +28,7 @@ class EnergyMeasurement:
         self.gas: int = safely_get_json_value(energy_measurement_json, "gasKwh", int)
         self.loop_pump: int = safely_get_json_value(energy_measurement_json, "loopPumpKwh", int)
 
-    def __repr__(self):
+    def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the usage measurement.
 
         Returns:
@@ -45,13 +46,21 @@ class EnergyMeasurement:
             "loop_pump": self.loop_pump,
         }
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the usage measurement.
+
+        Returns:
+            The usage measurement dictionary representation converted to a string.
+        """
+        return str(self.as_dict())
+
+    def __str__(self) -> str:
         """Return a readable string representation of the usage measurement.
 
         Returns:
             The measurement representation converted to a string.
         """
-        return str(self.__repr__())
+        return str(self.as_dict())
 
 
 class Energy:
@@ -71,8 +80,8 @@ class Energy:
 
     def __init__(
         self,
-        raw: dict,
-    ):
+        raw: dict[str, Any],
+    ) -> None:
         """Build energy state from a Carrier energy GraphQL response.
 
         Args:
@@ -121,7 +130,7 @@ class Energy:
                 return period
         return None
 
-    def __repr__(self):
+    def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of energy configuration and usage.
 
         Returns:
@@ -138,13 +147,21 @@ class Energy:
             "fan_gas": self.fan_gas,
             "gas": self.gas,
             "loop_pump": self.loop_pump,
-            "periods": [periods.__repr__() for periods in self.periods or []],
+            "periods": [periods.as_dict() for periods in self.periods or []],
         }
 
-    def __str__(self):
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the energy model.
+
+        Returns:
+            The energy dictionary representation converted to a string.
+        """
+        return str(self.as_dict())
+
+    def __str__(self) -> str:
         """Return a readable string representation of the energy model.
 
         Returns:
             The energy representation converted to a string.
         """
-        return str(self.__repr__())
+        return str(self.as_dict())
