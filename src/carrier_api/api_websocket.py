@@ -1,32 +1,35 @@
-import asyncio
-from asyncio import sleep, create_task, CancelledError, get_event_loop, current_task
-from logging import getLogger
-from collections.abc import Callable
-from random import random
+from __future__ import annotations
 
-from aiohttp import WSMsgType, ClientWebSocketResponse
+from asyncio import CancelledError, Task, create_task, current_task, sleep
+from collections.abc import Awaitable, Callable
+from logging import getLogger
+from random import random
+from typing import TYPE_CHECKING
+
+from aiohttp import ClientWebSocketResponse, WSMsgType
+
+if TYPE_CHECKING:
+    from .api_connection_graphql import ApiConnectionGraphql
 
 _LOGGER = getLogger(__name__)
 
+AsyncCallback = Callable[[str], Awaitable[None]]
+
 
 class ApiWebsocket:
-    websocket: ClientWebSocketResponse | None = None
-    running = None
-    async_callbacks: list[Callable] = []
-    task_heartbeat = None
-    task_listener = None
-
-    def __init__(
-            self,
-            api_connection_graphql
-    ):
+    def __init__(self, api_connection_graphql: ApiConnectionGraphql) -> None:
+        self.websocket: ClientWebSocketResponse | None = None
+        self.running: bool | None = None
+        self.async_callbacks: list[AsyncCallback] = []
+        self.task_heartbeat: Task[None] | None = None
+        self.task_listener: Task[None] | None = None
         self.api_connection_graphql = api_connection_graphql
         self.api_connection_graphql.api_websocket = self
 
-    def callback_add(self, async_callback):
+    def callback_add(self, async_callback: AsyncCallback) -> None:
         self.async_callbacks.append(async_callback)
 
-    def callback_remove(self, async_callback):
+    def callback_remove(self, async_callback: AsyncCallback) -> None:
         self.async_callbacks.remove(async_callback)
 
     async def loop_heartbeat(self) -> None:
@@ -49,18 +52,21 @@ class ApiWebsocket:
             await sleep(55)
 
     async def create_task_heartbeat(self) -> None:
-        self.task_heartbeat = get_event_loop().create_task(self.loop_heartbeat(), name=f"carrier_api_ws_heartbeat:{random()}")
+        self.task_heartbeat = create_task(
+            self.loop_heartbeat(), name=f"carrier_api_ws_heartbeat:{random()}"
+        )
 
     async def listener(self) -> None:
         await self.api_connection_graphql.check_auth_expiration()
         async with self.api_connection_graphql.api_session.ws_connect(
-                f"wss://realtime.infinity.iot.carrier.com/?Token={self.api_connection_graphql.access_token}") as self.websocket:
+            f"wss://realtime.infinity.iot.carrier.com/?Token={self.api_connection_graphql.access_token}"
+        ) as self.websocket:
             if self.task_heartbeat is None:
                 await self.create_task_heartbeat()
             if self.websocket is not None:
                 async for msg in self.websocket:
                     if msg.type == WSMsgType.TEXT:
-                        if msg.data == 'close cmd':
+                        if msg.data == "close cmd":
                             await self.websocket.close()
                             break
                         else:

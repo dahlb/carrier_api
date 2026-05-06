@@ -1,9 +1,0 @@
-ruff==0.15.12
-gql[aiohttp]
-aiohttp
-deepmerge
-python-dateutil
-pytest
-pytest
-pytest-md
-pytest-emoji

@@ -7,11 +7,11 @@ import sys
 
 import asyncio
 
-path_root = Path(__file__).parents[2]
-sys.path.append(str(path_root))
+path_src = Path(__file__).parents[1]
+sys.path.append(str(path_src))
 
 
-logger = logging.getLogger("src.carrier_api")
+logger = logging.getLogger("carrier_api")
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
@@ -20,9 +20,10 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
-from src.carrier_api.api_connection_graphql import ApiConnectionGraphql
-from src.carrier_api.api_websocket_data_updater import WebsocketDataUpdater
-from src.carrier_api.const import FanModes
+from carrier_api.api_connection_graphql import ApiConnectionGraphql
+from carrier_api.api_websocket_data_updater import WebsocketDataUpdater
+from carrier_api.const import FanModes
+
 
 async def main():
     username = input("username: ")
@@ -32,21 +33,31 @@ async def main():
         api_connection = ApiConnectionGraphql(username=username, password=password)
         systems = await api_connection.load_data()
         print([system.__repr__() for system in systems])
+
         async def listener():
             async def output(message):
                 print([system.__repr__() for system in systems])
-            ws_data_updater = WebsocketDataUpdater(systems=systems)
-            api_connection.api_websocket.callback_add(ws_data_updater.message_handler)
-            api_connection.api_websocket.callback_add(output)
-            await api_connection.api_websocket.create_task_listener()
 
-        listener = create_task(listener(), name="listener")
+            ws_data_updater = WebsocketDataUpdater(systems=systems)
+            api_websocket = api_connection.api_websocket
+            if api_websocket is None:
+                raise RuntimeError("api_websocket was not initialized")
+            api_websocket.callback_add(ws_data_updater.message_handler)
+            api_websocket.callback_add(output)
+            await api_websocket.create_task_listener()
+
+        listener_task = create_task(listener(), name="listener")
+        logger.debug("started task %s", listener_task.get_name())
+
+        zones = systems[0].config.zones
+        if not zones:
+            raise RuntimeError("No config zones available")
 
         await api_connection.set_config_manual_activity(
             system_serial=systems[0].profile.serial,
-            zone_id=systems[0].config.zones[0].api_id,
-            heat_set_point='73',
-            cool_set_point='80',
+            zone_id=zones[0].api_id,
+            heat_set_point="73",
+            cool_set_point="80",
             fan_mode=FanModes.LOW,
         )
         await sleep(500)

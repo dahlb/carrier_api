@@ -11,15 +11,15 @@ _LOGGER = getLogger(__name__)
 
 def find_by_id(collection: list[dict], id: str) -> dict:
     for item in collection:
-        if str(item['id']) == str(id):
+        if str(item["id"]) == str(id):
             return item
     raise ValueError("id: %s not found in list: %s", id, collection)
 
 
 class WebsocketDataUpdater:
     def __init__(
-            self,
-            systems: list[System],
+        self,
+        systems: list[System],
     ):
         self.systems = systems
 
@@ -36,8 +36,9 @@ class WebsocketDataUpdater:
         _timestamp = websocket_message_json.pop("timestamp", None)
         _updated_time = websocket_message_json.pop("updatedTime", None)
         if serial_id is None:
-            _LOGGER.debug("Received message without deviceId, skipping messageType=%s",
-                          message_type)
+            _LOGGER.debug(
+                "Received message without deviceId, skipping messageType=%s", message_type
+            )
             return
         system = self.carrier_system(serial_id=serial_id)
         if system is None:
@@ -45,10 +46,10 @@ class WebsocketDataUpdater:
         match message_type:
             case "InfinityStatus":
                 _LOGGER.debug("InfinityStatus received: %s", websocket_message)
-                zones = websocket_message_json.pop('zones', [])
+                zones = websocket_message_json.pop("zones", [])
                 for zone in zones:
                     _timestamp = zone.pop("timestamp", None)
-                    stale_zone = find_by_id(system.status.raw["zones"], zone['id'])
+                    stale_zone = find_by_id(system.status.raw["zones"], zone["id"])
                     always_merger.merge(stale_zone, zone)
                 merged_status = always_merger.merge(system.status.raw, websocket_message_json)
                 merged_status.update({"utcTime": datetime.now(UTC).isoformat()})
@@ -57,13 +58,13 @@ class WebsocketDataUpdater:
                 _message_id = websocket_message_json.pop("id", None)
                 _config_id = websocket_message_json.pop("infinitySystemConfigurationId", None)
                 _LOGGER.debug("InfinityConfig received: %s", websocket_message)
-                zones = websocket_message_json.pop('zones', [])
+                zones = websocket_message_json.pop("zones", [])
                 for zone in zones:
                     _timestamp = zone.pop("timestamp", None)
                     if "id" in zone:
-                        zone_id = zone['id']
+                        zone_id = zone["id"]
                         stale_zone = find_by_id(system.config.raw["zones"], zone_id)
-                        activities = zone.pop('activities', [])
+                        activities = zone.pop("activities", [])
                         for activity in activities:
                             _timestamp = activity.pop("timestamp", None)
                             _zone_configuration_id = activity.pop("zoneConfigurationId", None)
