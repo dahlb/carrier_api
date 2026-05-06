@@ -48,7 +48,7 @@ jobs:
 
       - name: Download built package
         if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: Packages
           path: dist
