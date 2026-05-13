@@ -81,7 +81,7 @@ class SpyConnection(ApiConnectionGraphql):
         super().__init__(
             username="user@example.com",
             password="password",
-            client_session=cast(ClientSession, FakeSession()),
+            client_session=cast("ClientSession", FakeSession()),
         )
         self.authed_calls: list[tuple[str, dict[str, Any]]] = []
         self.config_updates: list[dict[str, Any]] = []
@@ -175,7 +175,7 @@ async def test_cleanup_closes_provided_session() -> None:
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
-        client_session=cast(ClientSession, session),
+        client_session=cast("ClientSession", session),
     )
 
     await connection.cleanup()
@@ -190,7 +190,7 @@ async def test_refresh_auth_token_updates_token_state() -> None:
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
-        client_session=cast(ClientSession, session),
+        client_session=cast("ClientSession", session),
     )
     connection.refresh_token = "old-refresh"
 
@@ -493,7 +493,7 @@ async def test_update_methods_send_reconcile_when_websocket_exists() -> None:
     connection = MutatingConnection(
         username="user@example.com",
         password="password",
-        client_session=cast(ClientSession, FakeSession()),
+        client_session=cast("ClientSession", FakeSession()),
     )
     connection.api_websocket = websocket  # type: ignore[assignment]
     variables: dict[str, Any] = {"input": {"serial": "SERIAL"}}
