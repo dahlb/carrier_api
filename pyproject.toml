@@ -4,7 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "carrier_api"
-version = "2.11.3"
 authors = [
     { name = "Bren Dahl", email = "dahl.brendan@gmail.com" },
 ]
@@ -12,6 +11,7 @@ description = "Carrier Api Wrapper"
 readme = "README.md"
 requires-python = ">=3.14, <4"
 license = "MIT"
+dynamic = ["version"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -58,6 +58,9 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "carrier_api.const.VERSION" }
 
 [tool.setuptools.package-data]
 carrier_api = ["py.typed"]

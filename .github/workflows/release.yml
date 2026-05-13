@@ -26,13 +26,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update version file
-        if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
+      - name: Update Version in const.py
+        if: ${{steps.semantic_release_info.outputs.new_release_published == 'true'}}
         env:
-          NEW_VERSION: ${{ steps.semantic_release_info.outputs.new_release_version }}
+          NEW_VERSION: ${{steps.semantic_release_info.outputs.new_release_version}}
         run: |
           echo "Version: $NEW_VERSION"
-          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/g" pyproject.toml
+          sed -i "s/^VERSION: str = \".*\"/VERSION: str = \"$NEW_VERSION\"/g" src/carrier_api/const.py
+
+      - name: Verify version updates
+        if: ${{steps.semantic_release_info.outputs.new_release_published == 'true'}}
+        env:
+          NEW_VERSION: ${{steps.semantic_release_info.outputs.new_release_version}}
+        run: |
+          expected_version="$NEW_VERSION"
+          if ! grep -Fq "VERSION: str = \"$expected_version\"" src/carrier_api/const.py; then
+            echo "Expected src/carrier_api/const.py to contain VERSION: str = \"$expected_version\" after version update" >&2
+            exit 1
+          fi
 
       - name: Set up Python
         if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
@@ -67,7 +78,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git diff
-          git add pyproject.toml
+          git add src/carrier_api/const.py
           if ! git diff --cached --quiet; then
             git commit -m "chore: bumping version to $NEW_VERSION [skip ci]"
           fi

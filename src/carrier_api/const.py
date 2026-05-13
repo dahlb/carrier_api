@@ -2,6 +2,8 @@
 
 from enum import Enum
 
+VERSION: str = "2.11.3"
+
 
 class SystemModes(Enum):
     """Operating modes accepted or reported by Carrier systems."""
