@@ -1,5 +1,6 @@
 """Contract tests for stored GraphQL and websocket fixtures."""
 
+from asyncio import to_thread
 import json
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,25 @@ GRAPHQL_FIXTURES = sorted((FIXTURE_ROOT / "graphql").glob("*.json"))
 MESSAGE_FIXTURES = sorted((FIXTURE_ROOT / "messages").glob("*.json"))
 
 
+def parse_json_object(text: str, *, name: str) -> dict[str, Any]:
+    """Parse a JSON fixture text and assert that it contains an object.
+
+    Args:
+        text: Fixture text to parse.
+        name: Fixture name to include in errors.
+
+    Returns:
+        Parsed JSON object.
+
+    Raises:
+        TypeError: If the fixture does not contain a JSON object.
+    """
+    payload = json.loads(text)
+    if not isinstance(payload, dict):
+        raise TypeError(f"{name} must contain a JSON object")
+    return payload
+
+
 def load_json_object(path: Path) -> dict[str, Any]:
     """Load a JSON fixture and assert that it contains an object.
 
@@ -26,10 +46,7 @@ def load_json_object(path: Path) -> dict[str, Any]:
     Raises:
         TypeError: If the fixture does not contain a JSON object.
     """
-    payload = json.loads(path.read_text())
-    if not isinstance(payload, dict):
-        raise TypeError(f"{path.name} must contain a JSON object")
-    return payload
+    return parse_json_object(path.read_text(), name=path.name)
 
 
 @pytest.mark.parametrize("fixture_path", GRAPHQL_FIXTURES, ids=lambda path: path.name)
@@ -74,8 +91,8 @@ async def test_websocket_message_fixtures_match_update_handler_contract(
         fixture_path: Stored websocket message fixture under test.
         systems: Fresh system models built from GraphQL fixtures.
     """
-    message = fixture_path.read_text()
-    payload = load_json_object(fixture_path)
+    message = await to_thread(fixture_path.read_text)
+    payload = parse_json_object(message, name=fixture_path.name)
     updater = WebsocketDataUpdater(systems)
     original_status_payload = systems[0].status.as_dict()
     original_config_payload = systems[0].config.as_dict()
