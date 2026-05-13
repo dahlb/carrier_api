@@ -201,6 +201,7 @@ asyncio_mode = "auto"
 [tool.coverage.run]
 branch = true
 source = ["carrier_api"]
+omit = ["src/carrier_api/live_smoke_test.py"]
 relative_files = true
 parallel = false
 
