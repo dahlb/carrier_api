@@ -182,7 +182,7 @@ class WorkflowConnection(ApiConnectionGraphql):
         """
         self.access_token = "workflow-token"
         self.workflow_session = FakeWorkflowSession(websocket)
-        self.api_session = cast(ClientSession, self.workflow_session)
+        self.api_session = cast("ClientSession", self.workflow_session)
         self.api_websocket: ApiWebsocket | None = None
         self.auth_checks = 0
 
@@ -253,7 +253,7 @@ class MutationWorkflowConnection(ApiConnectionGraphql):
     def __init__(self) -> None:
         """Initialize mutation workflow state."""
         self.events: list[tuple[str, dict[str, Any] | None]] = []
-        self.api_websocket = cast(ApiWebsocket, ReconcileRecorder(self.events))
+        self.api_websocket = cast("ApiWebsocket", ReconcileRecorder(self.events))
 
     async def authed_query(
         self,
