@@ -1,9 +1,11 @@
+"""Carrier API exception types."""
+
 from graphql import GraphQLError
 
 
 class BaseError(GraphQLError):
-    pass
+    """Base GraphQL-compatible exception for Carrier API failures."""
 
 
 class AuthError(GraphQLError):
-    pass
+    """Raised when Carrier authentication fails or returns an unsuccessful result."""

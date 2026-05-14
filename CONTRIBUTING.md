@@ -7,10 +7,10 @@ The process is straight-forward.
  - Read [How to get faster PR reviews](https://github.com/kubernetes/community/blob/master/contributors/guide/pull-requests.md#best-practices-for-faster-reviews) by Kubernetes (but skip step 0 and 1)
  - Fork the [git repository](https://github.com/dahlb/carrier_api).
    - Add a new method try to keep its signature as similar to other region/brands as possible.
-   - Add example responses
-     - modify a stub file
-     - run `./.venv/bin/python src/carrier_api/stub.py` (`.\.venv\Scripts\python src/carrier_api/stub.py` on Windows)
-     - add the logging from the console to the source code
+   - Add or update deterministic pytest coverage and fixture data.
+   - Run `scripts/live_smoke_test` against a live Carrier account when practical.
+   - Update `src/carrier_api/live_smoke_test.py` only when the default smoke-test flow should cover a new reusable live API path.
+   - Keep one-off local probe edits out of the final PR, and turn useful live output into stored fixtures or pytest coverage.
  - Create a Pull Request against the [**main**](https://github.com/dahlb/carrier_api/tree/main) branch.
 
 ## Issues (Features/Bugs)
