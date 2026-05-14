@@ -4,13 +4,14 @@ from collections.abc import AsyncIterator
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 
-from aiohttp import ClientSession, WSMsgType
+from aiohttp import ClientWebSocketResponse, WSMsgType
 from gql import GraphQLRequest
 import pytest
 
 from carrier_api import ApiConnectionGraphql, ApiWebsocket, WebsocketDataUpdater
+from carrier_api.api_websocket import AsyncCallback
 from carrier_api.const import ActivityTypes, FanModes
 from carrier_api.system import System
 
@@ -171,7 +172,7 @@ class FakeWorkflowSession:
         return FakeWorkflowWebsocketContext(self.websocket)
 
 
-class WorkflowConnection(ApiConnectionGraphql):
+class WorkflowConnection:
     """Connection double for websocket workflow tests."""
 
     def __init__(self, websocket: FakeWorkflowWebsocket) -> None:
@@ -182,7 +183,7 @@ class WorkflowConnection(ApiConnectionGraphql):
         """
         self.access_token = "workflow-token"
         self.workflow_session = FakeWorkflowSession(websocket)
-        self.api_session = cast("ClientSession", self.workflow_session)
+        self.api_session = self.workflow_session
         self.api_websocket: ApiWebsocket | None = None
         self.auth_checks = 0
 
@@ -193,6 +194,22 @@ class WorkflowConnection(ApiConnectionGraphql):
 
 class WorkflowApiWebsocket(ApiWebsocket):
     """Websocket manager that avoids starting a real heartbeat task."""
+
+    api_connection_graphql: Any
+
+    def __init__(self, workflow_connection: WorkflowConnection) -> None:
+        """Create a websocket manager bound to the workflow connection double.
+
+        Args:
+            workflow_connection: Fake connection used for deterministic workflow tests.
+        """
+        self.websocket: ClientWebSocketResponse | None = None
+        self.running: bool | None = None
+        self.async_callbacks: list[AsyncCallback] = []
+        self.task_heartbeat = None
+        self.task_listener = None
+        self.api_connection_graphql = workflow_connection
+        workflow_connection.api_websocket = self
 
     async def create_task_heartbeat(self) -> None:
         """Skip creating a real heartbeat task for deterministic workflow tests."""
@@ -231,7 +248,7 @@ async def test_websocket_listener_workflow_dispatches_updates_into_models(
     assert api_websocket.websocket is None
 
 
-class ReconcileRecorder:
+class ReconcileRecorder(ApiWebsocket):
     """Fake websocket that records reconcile calls in a shared event log."""
 
     def __init__(self, events: list[tuple[str, dict[str, Any] | None]]) -> None:
@@ -253,7 +270,7 @@ class MutationWorkflowConnection(ApiConnectionGraphql):
     def __init__(self) -> None:
         """Initialize mutation workflow state."""
         self.events: list[tuple[str, dict[str, Any] | None]] = []
-        self.api_websocket = cast("ApiWebsocket", ReconcileRecorder(self.events))
+        self.api_websocket = ReconcileRecorder(self.events)
 
     async def authed_query(
         self,

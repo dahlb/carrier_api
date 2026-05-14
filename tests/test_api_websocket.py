@@ -258,8 +258,11 @@ async def test_listener_breaks_on_websocket_error_message() -> None:
     """Stop listening when the websocket yields an error message."""
     websocket = FakeListenerWebsocket([SimpleNamespace(type=WSMsgType.ERROR, data=None)])
     connection = FakeListenerConnection(websocket)
-    api_websocket = FakeHeartbeatApiWebsocket(connection, FakeHeartbeatTask())
+    heartbeat_task = FakeHeartbeatTask()
+    api_websocket = FakeHeartbeatApiWebsocket(connection, heartbeat_task)
 
     await api_websocket.listener()
 
+    assert heartbeat_task.cancelled
     assert api_websocket.websocket is None
+    assert api_websocket.task_heartbeat is None

@@ -496,18 +496,20 @@ async def test_update_methods_send_reconcile_when_websocket_exists() -> None:
         client_session=cast("ClientSession", FakeSession()),
     )
     connection.api_websocket = websocket  # type: ignore[assignment]
-    variables: dict[str, Any] = {"input": {"serial": "SERIAL"}}
+    config_variables: dict[str, Any] = {"input": {"serial": "SERIAL"}}
+    zone_activity_variables: dict[str, Any] = {"input": {"serial": "SERIAL"}}
+    zone_config_variables: dict[str, Any] = {"input": {"serial": "SERIAL"}}
 
-    assert await connection._update_infinity_config(variables) == {
+    assert await connection._update_infinity_config(config_variables) == {
         "operation": "updateInfinityConfig",
-        "variables": variables,
+        "variables": config_variables,
     }
-    assert await connection._update_infinity_zone_activity(variables) == {
+    assert await connection._update_infinity_zone_activity(zone_activity_variables) == {
         "operation": "updateInfinityZoneActivity",
-        "variables": variables,
+        "variables": zone_activity_variables,
     }
-    assert await connection._update_infinity_zone_config(variables) == {
+    assert await connection._update_infinity_zone_config(zone_config_variables) == {
         "operation": "updateInfinityZoneConfig",
-        "variables": variables,
+        "variables": zone_config_variables,
     }
     assert websocket.calls == 3
