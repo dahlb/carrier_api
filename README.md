@@ -5,19 +5,18 @@
 | Name                                              |    Stmts |     Miss |   Branch |   BrPart |   Cover |   Missing |
 |-------------------------------------------------- | -------: | -------: | -------: | -------: | ------: | --------: |
 | src/carrier\_api/\_\_init\_\_.py                  |       11 |        0 |        0 |        0 |    100% |           |
-| src/carrier\_api/api\_connection\_graphql.py      |      164 |      122 |       44 |        0 |     20% |46-51, 55, 64-106, 110-113, 121-134, 149-159, 169-224, 235-378, 391-448, 458-467, 478-495, 507-524, 535-552, 567-570, 589-596, 613-616, 641-662, 682-694, 718-729, 741-750, 776-789 |
-| src/carrier\_api/api\_websocket.py                |       80 |       53 |       26 |        0 |     25% |57, 65-81, 85, 96-116, 124-134, 138, 142-146 |
+| src/carrier\_api/api\_connection\_graphql.py      |      164 |       28 |       44 |       11 |     79% |49, 64-106, 149-159, 494, 523, 551, 568, 590, 614, 683, 685, 719, 787 |
+| src/carrier\_api/api\_websocket.py                |       80 |       29 |       26 |        4 |     61% |65-81, 85, 100-\>102, 102-\>112, 103-\>112, 110-\>103, 124-134, 138 |
 | src/carrier\_api/api\_websocket\_data\_updater.py |       67 |        9 |       26 |        3 |     85% |89, 113-118, 122-123 |
-| src/carrier\_api/config.py                        |      120 |       34 |       30 |        4 |     65% |50, 64, 72, 111-114, 153, 157-159, 165, 176-187, 196-209, 217, 225, 261-\>263, 280, 293, 301 |
+| src/carrier\_api/config.py                        |      120 |        6 |       30 |        4 |     93% |72, 114, 165, 186, 217, 261-\>263, 301 |
 | src/carrier\_api/const.py                         |       27 |        0 |        0 |        0 |    100% |           |
-| src/carrier\_api/energy.py                        |       58 |       10 |        6 |        0 |     78% |37, 55, 63, 128-131, 139, 159, 167 |
+| src/carrier\_api/energy.py                        |       58 |        2 |        6 |        0 |     97% |   55, 167 |
 | src/carrier\_api/errors.py                        |        3 |        0 |        0 |        0 |    100% |           |
-| src/carrier\_api/live\_smoke\_test.py             |       95 |       95 |       20 |        0 |      0% |    26-211 |
-| src/carrier\_api/profile.py                       |       35 |        3 |        0 |        0 |     91% |54, 75, 83 |
-| src/carrier\_api/status.py                        |       87 |       20 |       16 |        1 |     70% |48-55, 63, 84, 92, 129-\>131, 154-159, 167, 193, 201 |
-| src/carrier\_api/system.py                        |       19 |        3 |        0 |        0 |     84% |43, 58, 66 |
-| src/carrier\_api/util.py                          |       27 |        3 |        8 |        1 |     89% |33-\>32, 51-53 |
-| **TOTAL**                                         |  **793** |  **352** |  **176** |    **9** | **50%** |           |
+| src/carrier\_api/profile.py                       |       35 |        0 |        0 |        0 |    100% |           |
+| src/carrier\_api/status.py                        |       87 |        3 |       16 |        1 |     96% |92, 129-\>131, 193, 201 |
+| src/carrier\_api/system.py                        |       19 |        1 |        0 |        0 |     95% |        66 |
+| src/carrier\_api/util.py                          |       27 |        0 |        8 |        0 |    100% |           |
+| **TOTAL**                                         |  **698** |   **78** |  **156** |   **23** | **87%** |           |
 
 
 ## Setup coverage badge
