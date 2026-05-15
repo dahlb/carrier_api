@@ -36,7 +36,7 @@ def safely_get_json_value(
             except TypeError, KeyError:
                 try:
                     value = value[int(x)]
-                except TypeError, KeyError, ValueError:
+                except TypeError, KeyError, ValueError, IndexError:
                     value = None
 
     try:

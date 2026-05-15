@@ -163,6 +163,7 @@ fixable = ["ALL"]
     "E501",    # line too long
     "S101",    # Use of assert detected
     "S105",    # Possible hardcoded password
+    "S106",    # Possible hardcoded password assigned to argument
     "S108",    # hardcoded-temp-file
     "SLF001",  # Private member accessed
 ]
@@ -201,6 +202,7 @@ asyncio_mode = "auto"
 [tool.coverage.run]
 branch = true
 source = ["carrier_api"]
+omit = ["src/carrier_api/live_smoke_test.py"]
 relative_files = true
 parallel = false
 
