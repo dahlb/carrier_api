@@ -4,7 +4,6 @@ from logging import getLogger
 from typing import Any
 
 from .config import Config
-from .const import FanModes
 from .energy import Energy
 from .profile import Profile
 from .status import Status
@@ -14,10 +13,6 @@ _LOGGER = getLogger(__name__)
 HEAT_CAPABILITY_FIELDS = ("electric_heat", "gas", "hp_heat", "loop_pump", "reheat")
 COOL_CAPABILITY_FIELDS = ("cooling", "loop_pump")
 FAN_CAPABILITY_FIELDS = ("fan", "fan_gas")
-HEAT_INDOOR_SOURCES = ("electric", "gas")
-HEAT_INDOOR_TYPES = ("fan coil", "fancoil", "furnace")
-HEAT_OUTDOOR_TYPE_PREFIXES = ("hp", "heatpump")
-COOL_OUTDOOR_TYPE_PREFIXES = ("ac", "hp", "cool", "heatpump")
 
 
 class System:
@@ -44,44 +39,41 @@ class System:
         self.config = config
 
     def supports_heat(self) -> bool:
-        """Return whether available Carrier data suggests heating support.
+        """Return whether Carrier energy data reports heating support.
 
-        Carrier does not expose these profile fields as typed capability enums.
-        This helper combines known energy reporting flags with best-effort
-        equipment metadata hints, so it should be treated as a practical support
-        signal rather than an authoritative equipment/control contract.
+        Carrier's captured profile fields do not expose typed HVAC capability
+        enums, and the raw ``idutype``/``odutype`` values are free-form strings
+        in the GraphQL schema. This helper intentionally uses parsed
+        ``energyConfig`` flags only, so treat it as a best-effort reported
+        support signal rather than an authoritative equipment/control contract.
 
         Returns:
-            ``True`` when equipment metadata or energy configuration suggests
-            the system has a heat-capable component.
+            ``True`` when any parsed heating energy capability is displayable
+            and enabled.
         """
-        return self._profile_supports_heat() or (
-            self._supports_any_energy_capability(HEAT_CAPABILITY_FIELDS)
-        )
+        return self._supports_any_energy_capability(HEAT_CAPABILITY_FIELDS)
 
     def supports_cool(self) -> bool:
-        """Return whether available Carrier data suggests cooling support.
+        """Return whether Carrier energy data reports cooling support.
 
-        Carrier does not expose these profile fields as typed capability enums.
-        This helper combines known energy reporting flags with best-effort
-        equipment metadata hints, so it should be treated as a practical support
-        signal rather than an authoritative equipment/control contract.
+        Carrier's captured profile fields do not expose typed HVAC capability
+        enums, and the raw ``idutype``/``odutype`` values are free-form strings
+        in the GraphQL schema. This helper intentionally uses parsed
+        ``energyConfig`` flags only, so treat it as a best-effort reported
+        support signal rather than an authoritative equipment/control contract.
 
         Returns:
-            ``True`` when equipment metadata or energy configuration suggests
-            the system has a cool-capable component.
+            ``True`` when any parsed cooling energy capability is displayable
+            and enabled.
         """
-        return self._profile_supports_cool() or (
-            self._supports_any_energy_capability(COOL_CAPABILITY_FIELDS)
-        )
+        return self._supports_any_energy_capability(COOL_CAPABILITY_FIELDS)
 
     def supports_fan(self) -> bool:
         """Return whether available Carrier data suggests fan support.
 
         Carrier does not expose a typed fan capability enum here. This helper
         treats the config fan flag as authoritative when Carrier provides it.
-        Activity fan modes and energy reporting flags are only fallbacks when
-        that flag is omitted.
+        Energy reporting flags are only a fallback when that flag is omitted.
 
         Returns:
             ``True`` when configuration or energy data suggests fan control is
@@ -89,8 +81,6 @@ class System:
         """
         if self.config.fan_enabled is not None:
             return self.config.fan_enabled
-        if self._config_supports_fan_control():
-            return True
         return self._supports_any_energy_capability(FAN_CAPABILITY_FIELDS)
 
     def supported_hvac_capabilities(self) -> dict[str, bool]:
@@ -98,9 +88,8 @@ class System:
 
         Returns:
             A dictionary containing boolean support signals for ``heat``,
-            ``cool``, and ``fan`` derived from Carrier profile, config, and
-            energy data. These are not guaranteed to be authoritative control
-            capabilities.
+            ``cool``, and ``fan`` derived from Carrier config and energy data.
+            These are not guaranteed to be authoritative control capabilities.
         """
         return {
             "heat": self.supports_heat(),
@@ -121,58 +110,6 @@ class System:
             getattr(self.energy, capability_field, False) is True
             for capability_field in capability_fields
         )
-
-    def _config_supports_fan_control(self) -> bool:
-        """Return whether zone activities expose fan control values.
-
-        Returns:
-            ``True`` when any configured activity has a parsed non-off fan mode.
-        """
-        return any(
-            activity.fan is not None and activity.fan is not FanModes.OFF
-            for zone in self.config.zones or []
-            for activity in zone.activities or []
-        )
-
-    def _profile_supports_heat(self) -> bool:
-        """Return whether profile metadata matches known heat-capable values.
-
-        Returns:
-            ``True`` when Carrier profile string fields match values currently
-            known to imply heat-capable indoor or outdoor hardware.
-        """
-        indoor_source = self._normalized_profile_value("indoor_unit_source")
-        indoor_type = self._normalized_profile_value("indoor_unit_type")
-        outdoor_type = self._normalized_profile_value("outdoor_unit_type")
-        return (
-            indoor_source in HEAT_INDOOR_SOURCES
-            or indoor_type in HEAT_INDOOR_TYPES
-            or outdoor_type.startswith(HEAT_OUTDOOR_TYPE_PREFIXES)
-        )
-
-    def _profile_supports_cool(self) -> bool:
-        """Return whether profile metadata matches known cool-capable values.
-
-        Returns:
-            ``True`` when Carrier profile string fields match values currently
-            known to imply cool-capable outdoor hardware.
-        """
-        outdoor_type = self._normalized_profile_value("outdoor_unit_type")
-        return outdoor_type.startswith(COOL_OUTDOOR_TYPE_PREFIXES)
-
-    def _normalized_profile_value(self, profile_field: str) -> str:
-        """Return a normalized profile field value for exact/prefix matching.
-
-        Args:
-            profile_field: Profile attribute name to inspect.
-
-        Returns:
-            A lower-case, stripped string value, or an empty string when absent.
-        """
-        value = getattr(self.profile, profile_field, None)
-        if value is None:
-            return ""
-        return str(value).strip().lower()
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the aggregate.

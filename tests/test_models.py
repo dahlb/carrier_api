@@ -333,22 +333,21 @@ def test_system_reports_supported_hvac_capabilities_from_equipment_and_config(
     }
 
 
-def test_system_hvac_capabilities_ignore_ambiguous_profile_strings(
+def test_system_hvac_capabilities_ignore_profile_equipment_strings(
     system_response: dict[str, Any],
     energy_response: dict[str, Any],
 ) -> None:
-    """Avoid reporting support from incidental profile substrings.
+    """Avoid reporting heat/cool support from free-form profile strings.
 
     Args:
         system_response: Parsed systems fixture.
         energy_response: Parsed energy fixture.
     """
     raw_system = deepcopy(system_response["infinitySystems"][0])
-    raw_system["profile"]["idutype"] = "package"
-    raw_system["profile"]["idusource"] = "none"
-    raw_system["profile"]["odutype"] = "package"
+    raw_system["profile"]["idutype"] = "furnace"
+    raw_system["profile"]["idusource"] = "gas"
+    raw_system["profile"]["odutype"] = "ac2stg"
     raw_system["config"]["cfgfan"] = "off"
-    raw_system["config"]["zones"] = []
     raw_energy = deepcopy(energy_response["infinityEnergy"])
     for energy_config in raw_energy["energyConfig"].values():
         if isinstance(energy_config, dict):
@@ -378,17 +377,17 @@ def test_system_hvac_capabilities_do_not_let_activity_fan_override_cfgfan_off(
     """
     system = systems[0]
     system.config.fan_enabled = False
-    system.energy.fan = False
-    system.energy.fan_gas = False
+    system.energy.fan = True
+    system.energy.fan_gas = True
 
     assert not system.supports_fan()
     assert not system.supported_hvac_capabilities()["fan"]
 
 
-def test_system_hvac_capabilities_fall_back_to_activity_fan_controls(
+def test_system_hvac_capabilities_fall_back_to_energy_fan_flags(
     systems: list[System],
 ) -> None:
-    """Use configured activity fan modes when cfgfan is absent.
+    """Use energy fan flags when cfgfan is absent.
 
     Args:
         systems: Prepared system fixture models.
@@ -397,6 +396,10 @@ def test_system_hvac_capabilities_fall_back_to_activity_fan_controls(
     system.config.fan_enabled = None
     system.energy.fan = False
     system.energy.fan_gas = False
+
+    assert not system.supports_fan()
+
+    system.energy.fan = True
 
     assert system.supports_fan()
     assert system.supported_hvac_capabilities()["fan"]
