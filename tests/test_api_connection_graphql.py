@@ -561,6 +561,46 @@ async def test_refresh_auth_token_normalizes_malformed_error_payload() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload", "cause_type"),
+    [
+        (
+            {
+                "expires_in": 3600,
+                "token_type": "Bearer",
+                "access_token": "new-access",
+            },
+            KeyError,
+        ),
+        (None, TypeError),
+    ],
+)
+async def test_refresh_auth_token_normalizes_malformed_success_payloads(
+    payload: object,
+    cause_type: type[BaseException],
+) -> None:
+    """Raise token refresh errors for malformed successful OAuth responses.
+
+    Args:
+        payload: Malformed successful OAuth payload returned by the fake response.
+        cause_type: Expected original exception type preserved as the cause.
+    """
+    session = FakeSession()
+    session.response = FakeResponse(cast("dict[str, Any]", payload))
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", session),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
+        await connection.refresh_auth_token()
+
+    assert isinstance(error.value.__cause__, cause_type)
+
+
+@pytest.mark.asyncio
 async def test_check_auth_expiration_logs_in_then_refreshes_when_expired(
     connection: SpyConnection,
 ) -> None:

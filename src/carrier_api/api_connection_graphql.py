@@ -199,10 +199,13 @@ class ApiConnectionGraphql:
             raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
         except (ClientError, TimeoutError, OSError, TypeError, ValueError) as error:
             raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
-        self.expires_at = datetime.now(UTC) + timedelta(seconds=data["expires_in"])
-        self.token_type = data["token_type"]
-        self.access_token = data["access_token"]
-        self.refresh_token = data["refresh_token"]
+        try:
+            self.expires_at = datetime.now(UTC) + timedelta(seconds=data["expires_in"])
+            self.token_type = data["token_type"]
+            self.access_token = data["access_token"]
+            self.refresh_token = data["refresh_token"]
+        except (KeyError, TypeError) as error:
+            raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
 
     async def authed_query(
         self, operation_name: str, query: GraphQLRequest, variable_values: dict[str, Any]
