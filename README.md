@@ -42,6 +42,14 @@ scripts/live_smoke_test
 
 Use it only when you want to exercise the live Carrier API. It can change thermostat settings.
 
+To run non-interactively, put credentials in a local `env` file and pass it with `--credentials-file`. Supported keys are `CARRIER_USERNAME`/`CARRIER_PASSWORD`.
+
+```bash
+scripts/live_smoke_test --credentials-file scripts/carrier_api.env --output-file /private/tmp/carrier_api.txt --schema-output-file /private/tmp/carrier_api_schema.json --read-only
+```
+
+Use `--output-file` when you want a full transcript for later API debugging or fixture updates. Use `--schema-output-file` to also capture the authenticated GraphQL introspection schema without temporarily editing the client. Use `--read-only` to skip the sample thermostat mutation while still loading systems, capturing schema, and listening for websocket messages.
+
 ## Basic Usage
 
 ```python
@@ -195,18 +203,13 @@ Add or update deterministic pytest coverage for behavior changes. Fixture data f
 
 ## Updating the Captured Schema
 
-To refresh `schema.graphql`, temporarily add this diagnostic block inside `ApiConnectionGraphql.authed_query()` after the GraphQL session is created:
+To refresh captured GraphQL schema data, run the live smoke test with `--schema-output-file`:
 
-```python
-introspection_query = get_introspection_query(**session.client.introspection_args)
-execution_result = await transport.execute(parse(introspection_query))
-schema = dumps(execution_result.data, indent=2)
-_LOGGER.debug(schema)
-with open("schema.graphql", "w") as f:
-    f.write(schema)
+```bash
+scripts/live_smoke_test --credentials-file scripts/carrier_api.env --schema-output-file /private/tmp/carrier_api_schema.json --read-only
 ```
 
-Keep one-off schema capture edits out of final commits unless the capture logic itself is being changed.
+The command authenticates with Carrier, runs the GraphQL introspection query, and writes the schema JSON to the path you provide. Add `--output-file /private/tmp/carrier_api.txt` when you also want the full live smoke-test transcript.
 
 ## Contributing
 

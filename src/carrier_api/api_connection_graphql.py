@@ -18,6 +18,7 @@ from .status import Status
 from .system import System
 
 _LOGGER = getLogger(__name__)
+GRAPHQL_EXECUTE_TIMEOUT_SECONDS = 60
 
 
 class ApiConnectionGraphql:
@@ -155,6 +156,7 @@ class ApiConnectionGraphql:
         async with Client(
             transport=transport,
             fetch_schema_from_transport=False,
+            execute_timeout=GRAPHQL_EXECUTE_TIMEOUT_SECONDS,
         ) as session:
             return await session.execute(
                 query, variable_values=variable_values, operation_name=operation_name

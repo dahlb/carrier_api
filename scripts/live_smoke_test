@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+export CARRIER_API_LIVE_SMOKE_CWD="$PWD"
+
 cd "$(dirname "$0")/.."
 
 if [ ! -x .venv/bin/python ]; then
