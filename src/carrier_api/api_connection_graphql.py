@@ -7,7 +7,11 @@ from typing import Any, Literal
 from aiohttp import ClientError, ClientResponseError, ClientSession
 from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
-from gql.transport.exceptions import TransportError as GraphqlTransportError, TransportQueryError
+from gql.transport.exceptions import (
+    TransportError as GraphqlTransportError,
+    TransportQueryError,
+    TransportServerError,
+)
 from graphql import GraphQLError
 
 from .api_websocket import ApiWebsocket
@@ -29,6 +33,20 @@ GRAPHQL_EXECUTE_TIMEOUT_SECONDS = 60
 
 _GRAPHQL_ERRORS = (GraphqlTransportError, TransportQueryError, GraphQLError)
 _CONNECTION_ERRORS = (GraphqlTransportError, ClientError, TimeoutError, OSError)
+_AUTH_HTTP_STATUSES = {401, 403}
+
+
+def _is_auth_transport_error(error: BaseException) -> bool:
+    """Return whether a transport error represents Carrier auth rejection.
+
+    Args:
+        error: Exception raised by the GraphQL transport.
+
+    Returns:
+        ``True`` when the GraphQL endpoint rejected the request with an
+        authentication-related HTTP status.
+    """
+    return isinstance(error, TransportServerError) and error.code in _AUTH_HTTP_STATUSES
 
 
 class ApiConnectionGraphql:
@@ -199,6 +217,10 @@ class ApiConnectionGraphql:
                 f"Carrier GraphQL operation failed: {operation_name}"
             ) from error
         except _CONNECTION_ERRORS as error:
+            if _is_auth_transport_error(error):
+                raise CarrierApiAuthError(
+                    f"Carrier authorization failed during GraphQL operation: {operation_name}"
+                ) from error
             raise CarrierApiConnectionError(
                 f"Carrier connection failed during GraphQL operation: {operation_name}"
             ) from error
