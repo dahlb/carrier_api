@@ -306,7 +306,7 @@ def read_dotenv_credentials(credentials_file: Path) -> dict[str, str]:
     return credentials
 
 
-def read_credentials_file(credentials_file: Path) -> dict[str, str]:
+def read_credentials_file(credentials_file: Path) -> dict[str, Any]:
     """Read Carrier credentials from a supported config file format.
 
     Args:
@@ -319,19 +319,19 @@ def read_credentials_file(credentials_file: Path) -> dict[str, str]:
         with credentials_file.open(encoding="utf-8") as file:
             data = json.load(file)
         if isinstance(data, dict):
-            return {str(key): str(value) for key, value in data.items()}
+            return {str(key): value for key, value in data.items()}
         raise ValueError("JSON credentials file must contain an object")
     if credentials_file.suffix == ".toml":
         with credentials_file.open("rb") as file:
             data = tomllib.load(file)
         carrier_data = data.get("carrier")
         if isinstance(carrier_data, dict):
-            return {str(key): str(value) for key, value in carrier_data.items()}
-        return {str(key): str(value) for key, value in data.items()}
+            return {str(key): value for key, value in carrier_data.items()}
+        return {str(key): value for key, value in data.items()}
     return read_dotenv_credentials(credentials_file)
 
 
-def find_first_value(credentials: Mapping[str, str], keys: tuple[str, ...]) -> str | None:
+def find_first_value(credentials: Mapping[str, Any], keys: tuple[str, ...]) -> str | None:
     """Find the first non-empty credential value among supported keys.
 
     Args:
@@ -343,13 +343,16 @@ def find_first_value(credentials: Mapping[str, str], keys: tuple[str, ...]) -> s
     """
     for key in keys:
         value = credentials.get(key)
-        if value:
-            return value
+        if value is None:
+            continue
+        value_text = str(value)
+        if value_text:
+            return value_text
     return None
 
 
 def credential_source_from_mapping(
-    credentials: Mapping[str, str],
+    credentials: Mapping[str, Any],
     description: str,
 ) -> CredentialSource | None:
     """Build a credential source from a mapping when both values are present.
@@ -425,10 +428,10 @@ async def write_captured_schema(
         execute_timeout=GRAPHQL_EXECUTE_TIMEOUT_SECONDS,
     ) as session:
         introspection_query = get_introspection_query(**session.client.introspection_args)
-        execution_result = await transport.execute(gql(introspection_query))
-    if execution_result.data is None:
+        schema_data = await session.execute(gql(introspection_query))
+    if not schema_data:
         raise RuntimeError("Carrier GraphQL introspection returned no schema data")
-    write_schema_output(schema_output_file, execution_result.data)
+    write_schema_output(schema_output_file, schema_data)
 
 
 @contextmanager
@@ -544,6 +547,8 @@ async def send_sample_manual_activity_update(
             fan_mode=FanModes.LOW,
         )
     except TransportServerError as err:
+        if err.code != 504:
+            raise
         print(f"Manual activity update failed: {err}")
         return False
     return True

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, Self, cast
 
+from gql import GraphQLRequest
 from gql.transport.exceptions import TransportServerError
 import pytest
 
@@ -20,6 +21,7 @@ from carrier_api.live_smoke_test import (
     maybe_send_sample_manual_activity_update,
     parse_args,
     send_sample_manual_activity_update,
+    write_captured_schema,
     write_schema_output,
 )
 
@@ -94,6 +96,15 @@ def test_load_credentials_rejects_partial_credentials_file(tmp_path: Path) -> No
     """Explicit credential files fail fast when a value is missing."""
     credentials_file = tmp_path / ".carrier.env"
     credentials_file.write_text("CARRIER_USERNAME=partial@example.com\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must include both"):
+        load_credentials(SmokeTestOptions(credentials_file=credentials_file))
+
+
+def test_load_credentials_rejects_json_null_values(tmp_path: Path) -> None:
+    """JSON null credentials do not become literal None strings."""
+    credentials_file = tmp_path / "carrier.json"
+    credentials_file.write_text('{"username": null, "password": null}', encoding="utf-8")
 
     with pytest.raises(ValueError, match="must include both"):
         load_credentials(SmokeTestOptions(credentials_file=credentials_file))
@@ -345,6 +356,163 @@ def test_write_schema_output_writes_pretty_json(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_write_captured_schema_executes_with_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Schema capture uses the gql session so timeout and query errors apply."""
+
+    class FakeTransport:
+        """Transport double that must not execute queries directly."""
+
+        def __init__(self, **kwargs: Any) -> None:
+            """Accept transport constructor arguments.
+
+            Args:
+                kwargs: Transport keyword arguments.
+            """
+
+        async def execute(self, query: GraphQLRequest) -> dict[str, Any]:
+            """Fail if schema capture bypasses the session.
+
+            Args:
+                query: GraphQL request.
+            """
+            raise AssertionError("transport.execute should not be called directly")
+
+    class FakeClient:
+        """gql client double that captures session execution."""
+
+        def __init__(self, **kwargs: Any) -> None:
+            """Initialize fake client state.
+
+            Args:
+                kwargs: Client keyword arguments.
+            """
+            self.client = SimpleNamespace(introspection_args={})
+            self.execute_timeout = kwargs["execute_timeout"]
+
+        async def __aenter__(self) -> Self:
+            """Enter the async context manager.
+
+            Returns:
+                The fake client.
+            """
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            """Exit the async context manager.
+
+            Args:
+                args: Context manager exception details.
+            """
+
+        async def execute(self, query: GraphQLRequest) -> dict[str, Any]:
+            """Return fake introspection data through the session path.
+
+            Args:
+                query: GraphQL request.
+
+            Returns:
+                Fake schema payload.
+            """
+            return {"__schema": {"queryType": {"name": "Query"}}}
+
+    class FakeConnection:
+        """Connection double for schema capture."""
+
+        token_type = "Bearer"
+        access_token = "access"
+
+        async def check_auth_expiration(self) -> None:
+            """Record that auth was checked."""
+
+    monkeypatch.setattr("carrier_api.live_smoke_test.AIOHTTPTransport", FakeTransport)
+    monkeypatch.setattr("carrier_api.live_smoke_test.Client", FakeClient)
+    schema_output_file = tmp_path / "schema.json"
+
+    await write_captured_schema(
+        cast("ApiConnectionGraphql", FakeConnection()),
+        schema_output_file,
+    )
+
+    assert "Query" in schema_output_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_write_captured_schema_propagates_session_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GraphQL introspection errors are not written as successful schemas."""
+
+    class FakeTransport:
+        """Transport double for schema capture."""
+
+        def __init__(self, **kwargs: Any) -> None:
+            """Accept transport constructor arguments.
+
+            Args:
+                kwargs: Transport keyword arguments.
+            """
+
+    class FakeClient:
+        """gql client double that raises from session execution."""
+
+        def __init__(self, **kwargs: Any) -> None:
+            """Initialize fake client state.
+
+            Args:
+                kwargs: Client keyword arguments.
+            """
+            self.client = SimpleNamespace(introspection_args={})
+
+        async def __aenter__(self) -> Self:
+            """Enter the async context manager.
+
+            Returns:
+                The fake client.
+            """
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            """Exit the async context manager.
+
+            Args:
+                args: Context manager exception details.
+            """
+
+        async def execute(self, query: GraphQLRequest) -> dict[str, Any]:
+            """Raise a GraphQL execution failure.
+
+            Args:
+                query: GraphQL request.
+            """
+            raise RuntimeError("introspection failed")
+
+    class FakeConnection:
+        """Connection double for schema capture."""
+
+        token_type = "Bearer"
+        access_token = "access"
+
+        async def check_auth_expiration(self) -> None:
+            """Record that auth was checked."""
+
+    monkeypatch.setattr("carrier_api.live_smoke_test.AIOHTTPTransport", FakeTransport)
+    monkeypatch.setattr("carrier_api.live_smoke_test.Client", FakeClient)
+    schema_output_file = tmp_path / "schema.json"
+
+    with pytest.raises(RuntimeError, match="introspection failed"):
+        await write_captured_schema(
+            cast("ApiConnectionGraphql", FakeConnection()),
+            schema_output_file,
+        )
+
+    assert not schema_output_file.exists()
+
+
+@pytest.mark.asyncio
 async def test_send_sample_manual_activity_update_continues_on_gateway_timeout(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -375,6 +543,35 @@ async def test_send_sample_manual_activity_update_continues_on_gateway_timeout(
 
     assert updated is False
     assert "Manual activity update failed" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_send_sample_manual_activity_update_reraises_non_timeout_server_errors() -> None:
+    """Only Carrier gateway timeouts are downgraded to smoke-test warnings."""
+
+    class FailingConnection:
+        """Connection double that raises a non-timeout server failure."""
+
+        async def set_config_manual_activity(self, **kwargs: Any) -> None:
+            """Raise a non-timeout transport error.
+
+            Args:
+                kwargs: Captured mutation arguments.
+            """
+            raise TransportServerError("401 Unauthorized", 401)
+
+    systems = [
+        SimpleNamespace(
+            profile=SimpleNamespace(serial="serial-1"),
+            config=SimpleNamespace(zones=[SimpleNamespace(api_id="zone-1")]),
+        )
+    ]
+
+    with pytest.raises(TransportServerError, match="401 Unauthorized"):
+        await send_sample_manual_activity_update(
+            cast("ApiConnectionGraphql", FailingConnection()),
+            systems,
+        )
 
 
 def test_smoke_test_transcript_captures_traceback(tmp_path: Path) -> None:
