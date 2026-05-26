@@ -8,8 +8,9 @@ from gql import GraphQLRequest, gql
 from gql.transport.exceptions import TransportQueryError
 import pytest
 
+import carrier_api
 from carrier_api import errors
-from carrier_api.api_connection_graphql import ApiConnectionGraphql
+from carrier_api.api_connection_graphql import _GRAPHQL_ERRORS, ApiConnectionGraphql
 from carrier_api.const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from carrier_api.system import System
 
@@ -258,6 +259,15 @@ def test_public_error_exports_use_carrier_api_prefix() -> None:
     assert issubclass(errors.CarrierApiAuthError, errors.CarrierApiError)
     assert issubclass(errors.CarrierApiGraphqlError, errors.CarrierApiError)
     assert issubclass(errors.CarrierApiTokenRefreshError, errors.CarrierApiError)
+    assert carrier_api.CarrierApiError is errors.CarrierApiError
+    assert carrier_api.CarrierApiAuthError is errors.CarrierApiAuthError
+    assert carrier_api.CarrierApiGraphqlError is errors.CarrierApiGraphqlError
+    assert carrier_api.CarrierApiTokenRefreshError is errors.CarrierApiTokenRefreshError
+
+
+def test_graphql_error_tuple_catches_transport_query_errors() -> None:
+    """Include query errors explicitly in the wrapped GraphQL error set."""
+    assert TransportQueryError in _GRAPHQL_ERRORS
 
 
 @pytest.mark.asyncio

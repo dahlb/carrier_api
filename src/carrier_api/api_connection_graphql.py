@@ -7,7 +7,7 @@ from typing import Any, Literal
 from aiohttp import ClientError, ClientSession
 from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
-from gql.transport.exceptions import TransportError as GraphqlTransportError
+from gql.transport.exceptions import TransportError as GraphqlTransportError, TransportQueryError
 from graphql import GraphQLError
 
 from .api_websocket import ApiWebsocket
@@ -22,7 +22,7 @@ from .system import System
 _LOGGER = getLogger(__name__)
 GRAPHQL_EXECUTE_TIMEOUT_SECONDS = 60
 
-_GRAPHQL_ERRORS = (GraphqlTransportError, GraphQLError)
+_GRAPHQL_ERRORS = (GraphqlTransportError, TransportQueryError, GraphQLError)
 
 
 class ApiConnectionGraphql:
