@@ -203,9 +203,11 @@ class ConfigZone:
 
         Returns:
             The configured activity matching the status/hold activity, or
-            ``None`` when that activity is missing from this zone's
-            configuration.
+            ``None`` when the status belongs to a different zone or that
+            activity is missing from this zone's configuration.
         """
+        if status_zone.api_id != self.api_id:
+            return None
         return self.find_activity(status_zone.current_status_activity)
 
     def next_activity_time(self) -> str | None:
@@ -314,7 +316,8 @@ class Config:
         self.etag = safely_get_json_value(self.raw, "etag")
         self.fuel_type = safely_get_json_value(self.raw, "fueltype")
         self.gas_unit = safely_get_json_value(self.raw, "gasunit")
-        self.fan_enabled = safely_get_json_value(self.raw, "cfgfan") == "on"
+        raw_fan_enabled = safely_get_json_value(self.raw, "cfgfan")
+        self.fan_enabled = None if raw_fan_enabled is None else raw_fan_enabled == "on"
         self.uv_enabled = safely_get_json_value(self.raw, "cfguv") == "on"
         self.humidifier_enabled = safely_get_json_value(self.raw, "cfghumid") == "on"
         self.humidifier_heat_target = safely_get_json_value(self.raw, "humidityHome.rhtg", int)

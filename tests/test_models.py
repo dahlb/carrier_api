@@ -218,6 +218,29 @@ def test_config_zone_current_activity_from_status_returns_none_for_missing_profi
     assert config.zones[0].current_status_activity(status.zones[0]) is None
 
 
+def test_config_zone_current_activity_from_status_returns_none_for_wrong_zone(
+    system_response: dict[str, Any],
+) -> None:
+    """Return no profile when the supplied status belongs to another zone.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    raw_system = system_response["infinitySystems"][0]
+    config = Config(raw_system["config"])
+    wrong_status_zone = StatusZone(
+        {
+            **raw_system["status"]["zones"][0],
+            "id": "2",
+            "enabled": "on",
+            "currentActivity": "wake",
+        }
+    )
+
+    assert config.zones[0].current_status_activity(wrong_status_zone) is None
+    assert config.zones[0].as_dict(wrong_status_zone)["current_activity"]["from_status"] is None
+
+
 def test_config_next_activity_time_returns_none_when_today_and_tomorrow_are_disabled() -> None:
     """Return no next activity time when today and tomorrow have no enabled periods."""
     zone = ConfigZone(
@@ -340,6 +363,23 @@ def test_system_hvac_capabilities_ignore_ambiguous_profile_strings(
         "cool": False,
         "fan": False,
     }
+
+
+def test_system_hvac_capabilities_do_not_let_energy_override_config_fan_off(
+    systems: list[System],
+) -> None:
+    """Treat config fan control as authoritative over fan energy telemetry.
+
+    Args:
+        systems: Prepared system fixture models.
+    """
+    system = systems[0]
+    system.config.fan_enabled = False
+    system.energy.fan = True
+    system.energy.fan_gas = True
+
+    assert not system.supports_fan()
+    assert not system.supported_hvac_capabilities()["fan"]
 
 
 def test_safely_get_json_value_handles_nested_lists_none_and_cast_failures() -> None:
