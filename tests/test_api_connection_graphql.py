@@ -442,6 +442,38 @@ async def test_refresh_auth_token_preserves_unauthorized_response_as_auth_error(
 
 
 @pytest.mark.asyncio
+async def test_refresh_auth_token_treats_invalid_grant_as_auth_error() -> None:
+    """Raise auth errors for OAuth invalid_grant token refresh responses."""
+    refresh_error = ClientResponseError(
+        request_info=None,  # type: ignore[arg-type]
+        history=(),
+        status=400,
+        message="bad request",
+    )
+
+    class InvalidGrantResponse(FakeResponse):
+        """Response double that raises an invalid_grant OAuth error."""
+
+        def raise_for_status(self) -> None:
+            """Raise the configured invalid_grant response error."""
+            raise refresh_error
+
+    session = FakeSession()
+    session.response = InvalidGrantResponse({"error": "invalid_grant"})
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", session),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiAuthError) as error:
+        await connection.refresh_auth_token()
+
+    assert error.value.__cause__ is refresh_error
+
+
+@pytest.mark.asyncio
 async def test_check_auth_expiration_logs_in_then_refreshes_when_expired(
     connection: SpyConnection,
 ) -> None:

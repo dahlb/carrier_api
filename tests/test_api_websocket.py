@@ -311,6 +311,37 @@ async def test_listener_wraps_websocket_connection_errors() -> None:
 
 
 @pytest.mark.asyncio
+async def test_listener_does_not_wrap_callback_connection_errors() -> None:
+    """Let callback I/O errors propagate instead of marking websocket failed."""
+    websocket = FakeListenerWebsocket([SimpleNamespace(type=WSMsgType.TEXT, data="payload")])
+    connection = FakeListenerConnection(websocket)
+    heartbeat_task = FakeHeartbeatTask()
+    api_websocket = FakeHeartbeatApiWebsocket(connection, heartbeat_task)
+    callback_error = ClientConnectionError("callback request failed")
+
+    async def fail_callback(message: str) -> None:
+        """Raise the configured callback I/O error.
+
+        Args:
+            message: Raw websocket text.
+
+        Raises:
+            ClientConnectionError: Always raised for this callback.
+        """
+        raise callback_error
+
+    api_websocket.callback_add(fail_callback)
+
+    with pytest.raises(ClientConnectionError) as error:
+        await api_websocket.listener()
+
+    assert error.value is callback_error
+    assert heartbeat_task.cancelled
+    assert api_websocket.websocket is None
+    assert api_websocket.task_heartbeat is None
+
+
+@pytest.mark.asyncio
 async def test_listener_breaks_on_websocket_error_message() -> None:
     """Stop listening when the websocket yields an error message."""
     websocket = FakeListenerWebsocket([SimpleNamespace(type=WSMsgType.ERROR, data=None)])

@@ -136,7 +136,10 @@ class ApiConnectionGraphql:
         """Refresh the OAuth access token using the stored refresh token.
 
         Raises:
-            CarrierApiTokenRefreshError: If Carrier rejects the refresh request.
+            CarrierApiAuthError: If Carrier rejects the refresh token as invalid
+                or unauthorized.
+            CarrierApiTokenRefreshError: If token refresh fails before Carrier
+                returns a valid OAuth response.
         """
         url = "https://sso.carrier.com/oauth2/default/v1/token"
         json_body = {
@@ -145,12 +148,15 @@ class ApiConnectionGraphql:
             "refresh_token": self.refresh_token,
             "scope": "offline_access",
         }
+        data: dict[str, Any] = {}
         try:
             response = await self.api_session.post(url=url, data=json_body)
-            response.raise_for_status()
             data = await response.json()
+            response.raise_for_status()
         except ClientResponseError as error:
-            if error.status in {401, 403}:
+            if error.status in {401, 403} or (
+                error.status == 400 and data.get("error") == "invalid_grant"
+            ):
                 raise CarrierApiAuthError("Carrier token refresh was rejected") from error
             raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
         except (ClientError, TimeoutError, OSError) as error:

@@ -20,6 +20,20 @@ _LOGGER = getLogger(__name__)
 AsyncCallback = Callable[[str], Awaitable[None]]
 
 
+class _CallbackError(Exception):
+    """Internal wrapper used to avoid treating callback I/O as websocket I/O."""
+
+    def __init__(self, error: ClientError | TimeoutError | OSError) -> None:
+        """Initialize the callback error wrapper.
+
+        Args:
+            error: Original callback exception to re-raise outside websocket
+                transport normalization.
+        """
+        super().__init__(str(error))
+        self.error = error
+
+
 class ApiWebsocket:
     """Manage Carrier realtime websocket connection state and callbacks."""
 
@@ -110,10 +124,15 @@ class ApiWebsocket:
                                 await self.websocket.close()
                                 break
                             for async_callback in self.async_callbacks:
-                                await async_callback(msg.data)
+                                try:
+                                    await async_callback(msg.data)
+                                except (ClientError, TimeoutError, OSError) as error:
+                                    raise _CallbackError(error) from error
                         elif msg.type == WSMsgType.ERROR:
                             break
                 _LOGGER.debug("ws: closed")
+        except _CallbackError as error:
+            raise error.error from None
         except (ClientError, TimeoutError, OSError) as error:
             raise CarrierApiWebsocketError("Carrier websocket connection failed") from error
         finally:
