@@ -42,6 +42,14 @@ scripts/live_smoke_test
 
 Use it only when you want to exercise the live Carrier API. It can change thermostat settings.
 
+To run non-interactively, put credentials in a local `.env`, TOML, or JSON file and pass it with `--credentials-file`. Supported keys include `CARRIER_USERNAME`/`CARRIER_PASSWORD` and `username`/`password`. You can also set `CARRIER_USERNAME` and `CARRIER_PASSWORD` in the process environment.
+
+```bash
+scripts/live_smoke_test --credentials-file .carrier.env --output-file /private/tmp/carrier_api_live_smoke.txt
+```
+
+Use `--output-file` when you want a full transcript for later API debugging or fixture updates.
+
 ## Basic Usage
 
 ```python

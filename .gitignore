@@ -18,4 +18,5 @@ __pycache__
 .vscode
 .idea
 coverage.xml
+live_smoke_test.env
 uv.lock
