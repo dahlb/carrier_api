@@ -356,9 +356,19 @@ async def test_listener_does_not_wrap_callback_connection_errors() -> None:
 
 
 @pytest.mark.asyncio
-async def test_listener_raises_websocket_error_message_exception() -> None:
-    """Raise Carrier websocket errors when the websocket reports an exception."""
-    websocket_error = ClientConnectionError("websocket receive failed")
+@pytest.mark.parametrize(
+    "websocket_error",
+    [ClientConnectionError("websocket receive failed"), None],
+)
+async def test_listener_raises_websocket_error_messages(
+    websocket_error: BaseException | None,
+) -> None:
+    """Raise Carrier websocket errors for websocket error messages.
+
+    Args:
+        websocket_error: Optional aiohttp websocket exception reported by the
+            fake websocket.
+    """
     websocket = FakeListenerWebsocket(
         [SimpleNamespace(type=WSMsgType.ERROR, data=None)], exception=websocket_error
     )
@@ -370,23 +380,6 @@ async def test_listener_raises_websocket_error_message_exception() -> None:
         await api_websocket.listener()
 
     assert error.value.__cause__ is websocket_error
-    assert heartbeat_task.cancelled
-    assert api_websocket.websocket is None
-    assert api_websocket.task_heartbeat is None
-
-
-@pytest.mark.asyncio
-async def test_listener_raises_websocket_error_message_without_exception() -> None:
-    """Raise Carrier websocket errors when aiohttp omits the underlying exception."""
-    websocket = FakeListenerWebsocket([SimpleNamespace(type=WSMsgType.ERROR, data=None)])
-    connection = FakeListenerConnection(websocket)
-    heartbeat_task = FakeHeartbeatTask()
-    api_websocket = FakeHeartbeatApiWebsocket(connection, heartbeat_task)
-
-    with pytest.raises(CarrierApiWebsocketError) as error:
-        await api_websocket.listener()
-
-    assert error.value.__cause__ is None
     assert heartbeat_task.cancelled
     assert api_websocket.websocket is None
     assert api_websocket.task_heartbeat is None

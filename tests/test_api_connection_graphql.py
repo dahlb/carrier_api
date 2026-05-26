@@ -18,25 +18,45 @@ from carrier_api.system import System
 class FakeResponse:
     """Minimal aiohttp response double for token refresh tests."""
 
-    def __init__(self, payload: object) -> None:
+    def __init__(
+        self,
+        payload: object,
+        status_error: ClientResponseError | None = None,
+        json_error: BaseException | None = None,
+    ) -> None:
         """Initialize the fake response with JSON payload data.
 
         Args:
             payload: Data returned from ``json``.
+            status_error: Optional error raised by ``raise_for_status``.
+            json_error: Optional error raised by ``json``.
         """
         self.payload = payload
+        self.status_error = status_error
+        self.json_error = json_error
         self.raise_for_status_called = False
 
     def raise_for_status(self) -> None:
-        """Record that response status validation was requested."""
+        """Record status validation and raise the configured status error.
+
+        Raises:
+            ClientResponseError: When ``status_error`` is configured.
+        """
         self.raise_for_status_called = True
+        if self.status_error is not None:
+            raise self.status_error
 
     async def json(self) -> object:
         """Return the configured JSON payload.
 
         Returns:
             The fake response payload.
+
+        Raises:
+            BaseException: When ``json_error`` is configured.
         """
+        if self.json_error is not None:
+            raise self.json_error
         return self.payload
 
 
@@ -127,6 +147,55 @@ class FakeGraphQLClient:
             "variables": variable_values,
             "operation_name": operation_name,
         }
+
+
+def graphql_client_double(
+    *,
+    result: dict[str, Any] | None = None,
+    error: BaseException | None = None,
+) -> type[object]:
+    """Create a GraphQL client double that returns or raises during execute.
+
+    Args:
+        result: Optional GraphQL result returned by ``execute``.
+        error: Optional error raised by ``execute``.
+
+    Returns:
+        A GraphQL client double class suitable for monkeypatching ``Client``.
+    """
+
+    class ConfiguredGraphQLClient:
+        """GraphQL client double with configured execute behavior."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            """Accept GraphQL client construction arguments."""
+
+        async def __aenter__(self) -> Self:
+            """Return the fake session.
+
+            Returns:
+                The fake GraphQL session.
+            """
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            """Exit the fake session context."""
+
+        async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            """Return or raise the configured GraphQL result.
+
+            Returns:
+                The configured GraphQL result.
+
+            Raises:
+                BaseException: When ``error`` is configured.
+            """
+            if error is not None:
+                raise error
+            assert result is not None
+            return result
+
+    return ConfiguredGraphQLClient
 
 
 class SpyConnection(ApiConnectionGraphql):
@@ -299,28 +368,9 @@ async def test_login_failure_preserves_auth_payload_in_exception_args(
         }
     }
 
-    class FailedLoginClient:
-        """GraphQL client double that returns a failed assisted login."""
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            """Accept GraphQL client construction arguments."""
-
-        async def __aenter__(self) -> Self:
-            """Return the fake session.
-
-            Returns:
-                The fake GraphQL session.
-            """
-            return self
-
-        async def __aexit__(self, *args: object) -> None:
-            """Exit the fake session context."""
-
-        async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-            """Return the configured failed login payload."""
-            return payload
-
-    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", FailedLoginClient)
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(result=payload)
+    )
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
@@ -410,56 +460,29 @@ async def test_refresh_auth_token_wraps_refresh_failures() -> None:
 
 
 @pytest.mark.asyncio
-async def test_refresh_auth_token_preserves_unauthorized_response_as_auth_error() -> None:
-    """Raise auth errors for unauthorized token refresh responses."""
+@pytest.mark.parametrize(
+    ("status", "payload"),
+    [(401, {}), (400, {"error": "invalid_grant"})],
+)
+async def test_refresh_auth_token_treats_auth_rejections_as_auth_error(
+    status: int,
+    payload: object,
+) -> None:
+    """Raise auth errors for rejected token refresh responses.
+
+    Args:
+        status: HTTP status returned by the fake token endpoint.
+        payload: JSON payload returned by the fake token endpoint.
+    """
     refresh_error = ClientResponseError(
         request_info=None,  # type: ignore[arg-type]
         history=(),
-        status=401,
-        message="unauthorized",
+        status=status,
+        message="token rejected",
     )
-
-    class UnauthorizedResponse(FakeResponse):
-        """Response double that raises an unauthorized status."""
-
-        def raise_for_status(self) -> None:
-            """Raise the configured unauthorized response error."""
-            raise refresh_error
 
     session = FakeSession()
-    session.response = UnauthorizedResponse({})
-    connection = ApiConnectionGraphql(
-        username="user@example.com",
-        password="password",
-        client_session=cast("ClientSession", session),
-    )
-    connection.refresh_token = "old-refresh"
-
-    with pytest.raises(errors.CarrierApiAuthError) as error:
-        await connection.refresh_auth_token()
-
-    assert error.value.__cause__ is refresh_error
-
-
-@pytest.mark.asyncio
-async def test_refresh_auth_token_treats_invalid_grant_as_auth_error() -> None:
-    """Raise auth errors for OAuth invalid_grant token refresh responses."""
-    refresh_error = ClientResponseError(
-        request_info=None,  # type: ignore[arg-type]
-        history=(),
-        status=400,
-        message="bad request",
-    )
-
-    class InvalidGrantResponse(FakeResponse):
-        """Response double that raises an invalid_grant OAuth error."""
-
-        def raise_for_status(self) -> None:
-            """Raise the configured invalid_grant response error."""
-            raise refresh_error
-
-    session = FakeSession()
-    session.response = InvalidGrantResponse({"error": "invalid_grant"})
+    session.response = FakeResponse(payload, status_error=refresh_error)
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
@@ -490,23 +513,8 @@ async def test_refresh_auth_token_ignores_non_object_error_payloads(
         message="bad request",
     )
 
-    class NonObjectErrorResponse(FakeResponse):
-        """Response double that returns a non-object OAuth error payload."""
-
-        def raise_for_status(self) -> None:
-            """Raise the configured bad request response error."""
-            raise refresh_error
-
-        async def json(self) -> Any:
-            """Return the configured non-object JSON payload.
-
-            Returns:
-                The configured non-object payload.
-            """
-            return payload
-
     session = FakeSession()
-    session.response = NonObjectErrorResponse({})
+    session.response = FakeResponse(payload, status_error=refresh_error)
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
@@ -530,23 +538,12 @@ async def test_refresh_auth_token_normalizes_malformed_error_payload() -> None:
         message="bad request",
     )
 
-    class MalformedErrorResponse(FakeResponse):
-        """Response double that raises while decoding the OAuth error payload."""
-
-        def raise_for_status(self) -> None:
-            """Raise the configured bad request response error."""
-            raise refresh_error
-
-        async def json(self) -> dict[str, Any]:
-            """Raise a JSON decode-style failure.
-
-            Raises:
-                ValueError: Always raised for this malformed response.
-            """
-            raise ValueError("invalid json")
-
     session = FakeSession()
-    session.response = MalformedErrorResponse({})
+    session.response = FakeResponse(
+        {},
+        status_error=refresh_error,
+        json_error=ValueError("invalid json"),
+    )
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
@@ -627,28 +624,9 @@ async def test_login_wraps_graphql_query_errors(monkeypatch: pytest.MonkeyPatch)
     """
     transport_error = TransportQueryError("invalid credentials")
 
-    class FailingClient:
-        """GraphQL client double that raises during login execution."""
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            """Accept GraphQL client construction arguments."""
-
-        async def __aenter__(self) -> Self:
-            """Return the fake session.
-
-            Returns:
-                The fake GraphQL session.
-            """
-            return self
-
-        async def __aexit__(self, *args: object) -> None:
-            """Exit the fake session context."""
-
-        async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-            """Raise the configured transport error."""
-            raise transport_error
-
-    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", FailingClient)
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
@@ -673,28 +651,9 @@ async def test_authed_query_wraps_graphql_query_errors(
     """
     transport_error = TransportQueryError("query failed")
 
-    class FailingClient:
-        """GraphQL client double that raises during authenticated execution."""
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            """Accept GraphQL client construction arguments."""
-
-        async def __aenter__(self) -> Self:
-            """Return the fake session.
-
-            Returns:
-                The fake GraphQL session.
-            """
-            return self
-
-        async def __aexit__(self, *args: object) -> None:
-            """Exit the fake session context."""
-
-        async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-            """Raise the configured transport error."""
-            raise transport_error
-
-    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", FailingClient)
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
@@ -733,29 +692,9 @@ async def test_authed_query_wraps_connection_errors(
         monkeypatch: Pytest helper for replacing the GraphQL client.
         transport_error: Network or transport exception raised by the fake client.
     """
-
-    class FailingClient:
-        """GraphQL client double that raises during authenticated execution."""
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            """Accept GraphQL client construction arguments."""
-
-        async def __aenter__(self) -> Self:
-            """Return the fake session.
-
-            Returns:
-                The fake GraphQL session.
-            """
-            return self
-
-        async def __aexit__(self, *args: object) -> None:
-            """Exit the fake session context."""
-
-        async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-            """Raise the configured connection error."""
-            raise transport_error
-
-    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", FailingClient)
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
@@ -790,28 +729,9 @@ async def test_authed_query_maps_auth_transport_errors_to_auth_error(
     """
     transport_error = TransportServerError("unauthorized", code=status)
 
-    class FailingClient:
-        """GraphQL client double that raises during authenticated execution."""
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            """Accept GraphQL client construction arguments."""
-
-        async def __aenter__(self) -> Self:
-            """Return the fake session.
-
-            Returns:
-                The fake GraphQL session.
-            """
-            return self
-
-        async def __aexit__(self, *args: object) -> None:
-            """Exit the fake session context."""
-
-        async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-            """Raise the configured auth transport error."""
-            raise transport_error
-
-    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", FailingClient)
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
