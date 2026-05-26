@@ -92,7 +92,7 @@ Model objects provide `as_dict()` for structured serialization. Their string and
 - `supports_fan()`
 - `supported_hvac_capabilities()`
 
-For zone-level profile resolution, call `ConfigZone.current_status_activity(status_zone)` with the matching `StatusZone`. This uses Carrier's reported current activity from live status data. Use `ConfigZone.current_scheduled_activity()` when you want the activity implied by schedule and hold configuration instead.
+For zone-level profile resolution, call `ConfigZone.current_status_activity(status_zone)` with the matching `StatusZone` from the same system. This uses Carrier's reported current activity from live status data. Use `ConfigZone.current_scheduled_activity()` when you want the activity implied by schedule and hold configuration instead. `System.as_dict()` performs the status/config pairing for the aggregate system.
 
 `System.as_dict()` includes `supported_hvac_capabilities` and passes status-zone context into config serialization so each zone dictionary includes `current_activity.from_schedule` and `current_activity.from_status`.
 

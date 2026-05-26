@@ -199,7 +199,9 @@ class ConfigZone:
 
         Args:
             status_zone: Runtime zone status containing Carrier's reported
-                current activity value.
+                current activity value. This must come from the same Carrier
+                system as this config zone; status zones do not include system
+                identity, so this method can only validate the zone ID.
 
         Returns:
             The configured activity matching the status/hold activity, or
@@ -340,6 +342,7 @@ class Config:
         Args:
             status_zones: Optional runtime status zones used to include
                 status-resolved current activity profiles in zone dictionaries.
+                These must come from the same Carrier system as this config.
 
         Returns:
             A dictionary containing high-level settings and enabled zones.

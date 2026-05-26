@@ -21,9 +21,11 @@ class FixedDateTime(datetime):
             tz: Optional timezone requested by production code.
 
         Returns:
-            A fixed aware datetime at 08:30.
+            A fixed datetime whose local wall-clock time is 08:30 after
+            production converts it through ``astimezone()``.
         """
-        return cls(2026, 5, 26, 8, 30, tzinfo=tz)
+        timestamp = datetime(2026, 5, 26, 8, 30).astimezone().timestamp()
+        return cls.fromtimestamp(timestamp, tz)
 
 
 def build_zone_with_periods(periods: list[dict[str, str]]) -> ConfigZone:
