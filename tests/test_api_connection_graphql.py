@@ -271,11 +271,67 @@ def test_public_error_exports_use_carrier_api_prefix() -> None:
     assert carrier_api.CarrierApiGraphqlError is errors.CarrierApiGraphqlError
     assert carrier_api.CarrierApiTokenRefreshError is errors.CarrierApiTokenRefreshError
     assert carrier_api.CarrierApiWebsocketError is errors.CarrierApiWebsocketError
+    assert errors.AuthError is errors.CarrierApiAuthError
+    assert errors.BaseError is errors.CarrierApiError
+    assert carrier_api.AuthError is errors.CarrierApiAuthError
+    assert carrier_api.BaseError is errors.CarrierApiError
 
 
 def test_graphql_error_tuple_catches_transport_query_errors() -> None:
     """Include query errors explicitly in the wrapped GraphQL error set."""
     assert TransportQueryError in _GRAPHQL_ERRORS
+
+
+@pytest.mark.asyncio
+async def test_login_failure_preserves_auth_payload_in_exception_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep legacy auth failure payload access while exposing ``payload``.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+    """
+    payload = {
+        "assistedLogin": {
+            "success": False,
+            "status": "FAILED",
+            "errorMessage": "invalid credentials",
+        }
+    }
+
+    class FailedLoginClient:
+        """GraphQL client double that returns a failed assisted login."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            """Accept GraphQL client construction arguments."""
+
+        async def __aenter__(self) -> Self:
+            """Return the fake session.
+
+            Returns:
+                The fake GraphQL session.
+            """
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            """Exit the fake session context."""
+
+        async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            """Return the configured failed login payload."""
+            return payload
+
+    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", FailedLoginClient)
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+
+    with pytest.raises(errors.CarrierApiAuthError) as error:
+        await connection.login()
+
+    assert error.value.args[0] == payload
+    assert error.value.payload == payload
 
 
 @pytest.mark.asyncio

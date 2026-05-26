@@ -39,6 +39,8 @@ class CarrierApiWebsocketError(CarrierApiConnectionError):
     """Raised when Carrier realtime websocket communication fails."""
 
 
-# Deprecated compatibility aliases. These will be removed in a future release.
+# Deprecated compatibility aliases. These preserve old import names but are not
+# parent classes for the new CarrierApi* hierarchy, so removing them later will
+# not require changing the inheritance of the supported exception classes.
 BaseError = CarrierApiError
 AuthError = CarrierApiAuthError
