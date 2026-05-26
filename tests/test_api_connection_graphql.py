@@ -1,10 +1,10 @@
 """Tests for Carrier GraphQL API connection helpers."""
 
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, Self, cast
 
 from aiohttp import ClientSession
-from gql import GraphQLRequest
+from gql import GraphQLRequest, gql
 import pytest
 
 from carrier_api.api_connection_graphql import ApiConnectionGraphql
@@ -71,6 +71,59 @@ class FakeSession:
         self.post_url = url
         self.post_data = data
         return self.response
+
+
+class FakeGraphQLClient:
+    """Minimal gql client double that captures constructor arguments."""
+
+    execute_timeout: int | float | None = None
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Capture gql client keyword arguments.
+
+        Args:
+            kwargs: Keyword arguments passed to ``gql.Client``.
+        """
+        self.kwargs = kwargs
+        FakeGraphQLClient.execute_timeout = kwargs.get("execute_timeout")
+
+    async def __aenter__(self) -> Self:
+        """Enter the fake async context manager.
+
+        Returns:
+            The fake GraphQL client.
+        """
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        """Exit the fake async context manager.
+
+        Args:
+            args: Context manager exception details.
+        """
+
+    async def execute(
+        self,
+        query: GraphQLRequest,
+        *,
+        variable_values: dict[str, Any],
+        operation_name: str,
+    ) -> dict[str, Any]:
+        """Return captured query metadata.
+
+        Args:
+            query: GraphQL request.
+            variable_values: Variables supplied to the query.
+            operation_name: GraphQL operation name.
+
+        Returns:
+            Captured query metadata.
+        """
+        return {
+            "query": query,
+            "variables": variable_values,
+            "operation_name": operation_name,
+        }
 
 
 class SpyConnection(ApiConnectionGraphql):
@@ -156,6 +209,32 @@ class SpyConnection(ApiConnectionGraphql):
         """
         self.zone_config_updates.append(variables)
         return {"ok": True, "variables": variables}
+
+
+@pytest.mark.asyncio
+async def test_authed_query_uses_extended_execute_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Authenticated queries allow slow Carrier responses to complete."""
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client",
+        FakeGraphQLClient,
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    connection.refresh_token = "refresh"
+    connection.token_type = "Bearer"
+    connection.access_token = "access"
+    connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+    await connection.authed_query(
+        operation_name="ExampleQuery",
+        query=gql("query ExampleQuery { example }"),
+        variable_values={},
+    )
+
+    assert FakeGraphQLClient.execute_timeout == 60
 
 
 @pytest.fixture

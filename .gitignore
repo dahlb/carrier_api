@@ -18,5 +18,10 @@ __pycache__
 .vscode
 .idea
 coverage.xml
-live_smoke_test.env
+carrier_api.env
+carrier_api.txt
+carrier_api_schema.json
+carrier_api.toml
+carrier_api.yaml
+carrier_api.yml
 uv.lock

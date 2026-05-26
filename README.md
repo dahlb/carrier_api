@@ -42,13 +42,13 @@ scripts/live_smoke_test
 
 Use it only when you want to exercise the live Carrier API. It can change thermostat settings.
 
-To run non-interactively, put credentials in a local `.env`, TOML, or JSON file and pass it with `--credentials-file`. Supported keys include `CARRIER_USERNAME`/`CARRIER_PASSWORD` and `username`/`password`. You can also set `CARRIER_USERNAME` and `CARRIER_PASSWORD` in the process environment.
+To run non-interactively, put credentials in a local `env` file and pass it with `--credentials-file`. Supported keys are `CARRIER_USERNAME`/`CARRIER_PASSWORD`.
 
 ```bash
-scripts/live_smoke_test --credentials-file .carrier.env --output-file /private/tmp/carrier_api_live_smoke.txt
+scripts/live_smoke_test --credentials-file scripts/carrier_api.env --output-file /private/tmp/carrier_api.txt --schema-output-file /private/tmp/carrier_api_schema.json --read-only
 ```
 
-Use `--output-file` when you want a full transcript for later API debugging or fixture updates.
+Use `--output-file` when you want a full transcript for later API debugging or fixture updates. Use `--schema-output-file` to also capture the authenticated GraphQL introspection schema without temporarily editing the client. Use `--read-only` to skip the sample thermostat mutation while still loading systems, capturing schema, and listening for websocket messages.
 
 ## Basic Usage
 

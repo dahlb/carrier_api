@@ -39,12 +39,17 @@ import sys
 import tomllib
 import traceback as traceback_module
 from types import TracebackType
-from typing import TextIO
+from typing import Any, TextIO
+
+from gql import Client, gql
+from gql.transport.aiohttp import AIOHTTPTransport
+from gql.transport.exceptions import TransportServerError
+from graphql import get_introspection_query
 
 path_src = Path(__file__).parents[1]
 sys.path.append(str(path_src))
 
-from carrier_api.api_connection_graphql import ApiConnectionGraphql
+from carrier_api.api_connection_graphql import GRAPHQL_EXECUTE_TIMEOUT_SECONDS, ApiConnectionGraphql
 from carrier_api.api_websocket_data_updater import WebsocketDataUpdater
 from carrier_api.const import FanModes
 
@@ -66,10 +71,10 @@ It loads your configured systems, prints their current state, starts websocket
 updates, sends one sample manual activity update to the first available zone,
 and then waits so incoming realtime messages can be observed.
 
-This script will change thermostat settings on the first available zone: it
-sets the heat set point to 73, the cool set point to 80, and the fan mode to low.
-After that update, it waits 5 minutes, so the terminal
-will appear to pause while it listens for websocket messages.
+Unless ``--read-only`` is provided, this script will change thermostat settings
+on the first available zone: it sets the heat set point to 73, the cool set
+point to 80, and the fan mode to low. After that update, it waits 5 minutes, so
+the terminal will appear to pause while it listens for websocket messages.
 
 Enter the Carrier or Bryant account email address and password that you
 use for the official thermostat app. These credentials are read from this
@@ -99,10 +104,14 @@ class SmokeTestOptions:
     Args:
         credentials_file: Optional file to read Carrier credentials from.
         output_file: Optional file to write a full smoke-test transcript to.
+        schema_output_file: Optional file to write captured GraphQL schema to.
+        read_only: Whether to skip the sample thermostat mutation.
     """
 
     credentials_file: Path | None = None
     output_file: Path | None = None
+    schema_output_file: Path | None = None
+    read_only: bool = False
 
 
 class TeeTextIO:
@@ -227,11 +236,40 @@ def parse_args(argv: list[str] | None = None) -> SmokeTestOptions:
         type=Path,
         help="Write stdout, stderr, and smoke-test logs to this transcript file.",
     )
+    parser.add_argument(
+        "--schema-output-file",
+        type=Path,
+        help="Write the authenticated GraphQL introspection schema to this JSON file.",
+    )
+    parser.add_argument(
+        "--read-only",
+        action="store_true",
+        help="Skip the sample thermostat mutation while leaving other smoke-test steps enabled.",
+    )
     namespace: Namespace = parser.parse_args(argv)
     return SmokeTestOptions(
-        credentials_file=namespace.credentials_file,
-        output_file=namespace.output_file,
+        credentials_file=resolve_invocation_path(namespace.credentials_file),
+        output_file=resolve_invocation_path(namespace.output_file),
+        schema_output_file=resolve_invocation_path(namespace.schema_output_file),
+        read_only=namespace.read_only,
     )
+
+
+def resolve_invocation_path(path: Path | None) -> Path | None:
+    """Resolve a command-line path relative to the launcher invocation directory.
+
+    Args:
+        path: Optional path from a command-line argument.
+
+    Returns:
+        Absolute path when a relative path was supplied through the launcher.
+    """
+    if path is None or path.is_absolute():
+        return path
+    invocation_cwd = os.environ.get("CARRIER_API_LIVE_SMOKE_CWD")
+    if invocation_cwd is None:
+        return path
+    return Path(invocation_cwd) / path
 
 
 def strip_env_value(value: str) -> str:
@@ -351,6 +389,48 @@ def load_credentials(options: SmokeTestOptions) -> CredentialSource | None:
     return credential_source_from_mapping(os.environ, "environment variables")
 
 
+def write_schema_output(schema_output_file: Path, schema_data: dict[str, Any]) -> None:
+    """Write captured GraphQL schema data to an inspectable JSON file.
+
+    Args:
+        schema_output_file: File that should receive the schema JSON.
+        schema_data: GraphQL introspection response data.
+    """
+    schema_output_file.parent.mkdir(parents=True, exist_ok=True)
+    schema_output_file.write_text(json.dumps(schema_data, indent=2), encoding="utf-8")
+
+
+async def write_captured_schema(
+    api_connection: ApiConnectionGraphql,
+    schema_output_file: Path,
+) -> None:
+    """Capture and write the authenticated Carrier GraphQL schema.
+
+    Args:
+        api_connection: Authenticated Carrier API connection.
+        schema_output_file: File that should receive the schema JSON.
+
+    Raises:
+        RuntimeError: If Carrier returns no introspection schema data.
+    """
+    await api_connection.check_auth_expiration()
+    transport = AIOHTTPTransport(
+        url="https://dataservice.infinity.iot.carrier.com/graphql",
+        headers={"Authorization": f"{api_connection.token_type} {api_connection.access_token}"},
+        ssl=True,
+    )
+    async with Client(
+        transport=transport,
+        fetch_schema_from_transport=False,
+        execute_timeout=GRAPHQL_EXECUTE_TIMEOUT_SECONDS,
+    ) as session:
+        introspection_query = get_introspection_query(**session.client.introspection_args)
+        execution_result = await transport.execute(gql(introspection_query))
+    if execution_result.data is None:
+        raise RuntimeError("Carrier GraphQL introspection returned no schema data")
+    write_schema_output(schema_output_file, execution_result.data)
+
+
 @contextmanager
 def capture_output(output_file: Path | None) -> Iterator[None]:
     """Optionally tee smoke-test output to a transcript file.
@@ -432,6 +512,65 @@ async def shutdown_websocket_listener(api_connection: ApiConnectionGraphql) -> N
     api_websocket.task_heartbeat = None
 
 
+async def send_sample_manual_activity_update(
+    api_connection: ApiConnectionGraphql,
+    systems: list[Any],
+) -> bool:
+    """Send the sample manual activity update used by the live smoke test.
+
+    Args:
+        api_connection: API connection used to send the mutation.
+        systems: Loaded Carrier system objects.
+
+    Returns:
+        True when Carrier accepts the mutation, otherwise False for captured
+        Carrier gateway failures.
+
+    Raises:
+        RuntimeError: If no system or zone is available to update.
+    """
+    if not systems:
+        raise RuntimeError("No systems available")
+    zones = systems[0].config.zones
+    if not zones:
+        raise RuntimeError("No config zones available")
+
+    try:
+        await api_connection.set_config_manual_activity(
+            system_serial=systems[0].profile.serial,
+            zone_id=zones[0].api_id,
+            heat_set_point="73",
+            cool_set_point="80",
+            fan_mode=FanModes.LOW,
+        )
+    except TransportServerError as err:
+        print(f"Manual activity update failed: {err}")
+        return False
+    return True
+
+
+async def maybe_send_sample_manual_activity_update(
+    api_connection: ApiConnectionGraphql,
+    systems: list[Any],
+    *,
+    read_only: bool,
+) -> bool:
+    """Send the sample mutation unless the smoke test is in read-only mode.
+
+    Args:
+        api_connection: API connection used to send the mutation.
+        systems: Loaded Carrier system objects.
+        read_only: Whether to skip mutation calls.
+
+    Returns:
+        True when the mutation is sent successfully, otherwise False.
+    """
+    if read_only:
+        print("Read-only mode enabled; skipping sample manual activity update.")
+        return False
+    return await send_sample_manual_activity_update(api_connection, systems)
+
+
 async def main(options: SmokeTestOptions) -> None:
     """Log in, load systems, start websocket updates, and send one manual update.
 
@@ -457,6 +596,9 @@ async def main(options: SmokeTestOptions) -> None:
     try:
         api_connection = ApiConnectionGraphql(username=username, password=password)
         systems = await api_connection.load_data()
+        if options.schema_output_file is not None:
+            await write_captured_schema(api_connection, options.schema_output_file)
+            print(f"Wrote captured GraphQL schema to {options.schema_output_file}")
         print([system.as_dict() for system in systems])
 
         async def listener() -> None:
@@ -483,18 +625,10 @@ async def main(options: SmokeTestOptions) -> None:
         await listener()
         logger.debug("started websocket listener task")
 
-        if not systems:
-            raise RuntimeError("No systems available")
-        zones = systems[0].config.zones
-        if not zones:
-            raise RuntimeError("No config zones available")
-
-        await api_connection.set_config_manual_activity(
-            system_serial=systems[0].profile.serial,
-            zone_id=zones[0].api_id,
-            heat_set_point="73",
-            cool_set_point="80",
-            fan_mode=FanModes.LOW,
+        await maybe_send_sample_manual_activity_update(
+            api_connection,
+            systems,
+            read_only=options.read_only,
         )
         print()
         print("--------------------------------------------------------------------------")
