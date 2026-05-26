@@ -13,18 +13,10 @@ _LOGGER = getLogger(__name__)
 HEAT_CAPABILITY_FIELDS = ("electric_heat", "gas", "hp_heat", "loop_pump", "reheat")
 COOL_CAPABILITY_FIELDS = ("cooling", "loop_pump")
 FAN_CAPABILITY_FIELDS = ("fan", "fan_gas")
-HEAT_PROFILE_FIELDS = ("indoor_unit_source", "indoor_unit_type", "outdoor_unit_type")
-COOL_PROFILE_FIELDS = ("outdoor_unit_type",)
-HEAT_PROFILE_TOKENS = (
-    "electric",
-    "fan coil",
-    "fancoil",
-    "furnace",
-    "gas",
-    "heat",
-    "hp",
-)
-COOL_PROFILE_TOKENS = ("ac", "cool", "hp")
+HEAT_INDOOR_SOURCES = ("electric", "gas")
+HEAT_INDOOR_TYPES = ("fan coil", "fancoil", "furnace")
+HEAT_OUTDOOR_TYPE_PREFIXES = ("hp", "heatpump")
+COOL_OUTDOOR_TYPE_PREFIXES = ("ac", "hp", "cool", "heatpump")
 
 
 class System:
@@ -57,7 +49,7 @@ class System:
             ``True`` when equipment metadata or energy configuration indicates
             the system has a heat-capable component.
         """
-        return self._profile_contains_any(HEAT_PROFILE_FIELDS, HEAT_PROFILE_TOKENS) or (
+        return self._profile_supports_heat() or (
             self._supports_any_energy_capability(HEAT_CAPABILITY_FIELDS)
         )
 
@@ -68,7 +60,7 @@ class System:
             ``True`` when equipment metadata or energy configuration indicates
             the system has a cool-capable component.
         """
-        return self._profile_contains_any(COOL_PROFILE_FIELDS, COOL_PROFILE_TOKENS) or (
+        return self._profile_supports_cool() or (
             self._supports_any_energy_capability(COOL_CAPABILITY_FIELDS)
         )
 
@@ -110,23 +102,45 @@ class System:
             for capability_field in capability_fields
         )
 
-    def _profile_contains_any(
-        self, profile_fields: tuple[str, ...], capability_tokens: tuple[str, ...]
-    ) -> bool:
-        """Return whether profile equipment metadata contains capability hints.
-
-        Args:
-            profile_fields: Profile attribute names to inspect.
-            capability_tokens: Case-insensitive substrings that imply support.
+    def _profile_supports_heat(self) -> bool:
+        """Return whether profile equipment metadata reports known heat hardware.
 
         Returns:
-            ``True`` when any named profile field contains a capability token.
+            ``True`` when Carrier profile fields identify a heat-capable indoor
+            or outdoor unit.
         """
-        return any(
-            capability_token in str(getattr(self.profile, profile_field, "")).lower()
-            for profile_field in profile_fields
-            for capability_token in capability_tokens
+        indoor_source = self._normalized_profile_value("indoor_unit_source")
+        indoor_type = self._normalized_profile_value("indoor_unit_type")
+        outdoor_type = self._normalized_profile_value("outdoor_unit_type")
+        return (
+            indoor_source in HEAT_INDOOR_SOURCES
+            or indoor_type in HEAT_INDOOR_TYPES
+            or outdoor_type.startswith(HEAT_OUTDOOR_TYPE_PREFIXES)
         )
+
+    def _profile_supports_cool(self) -> bool:
+        """Return whether profile equipment metadata reports known cool hardware.
+
+        Returns:
+            ``True`` when Carrier profile fields identify a cool-capable
+            outdoor unit.
+        """
+        outdoor_type = self._normalized_profile_value("outdoor_unit_type")
+        return outdoor_type.startswith(COOL_OUTDOOR_TYPE_PREFIXES)
+
+    def _normalized_profile_value(self, profile_field: str) -> str:
+        """Return a normalized profile field value for exact/prefix matching.
+
+        Args:
+            profile_field: Profile attribute name to inspect.
+
+        Returns:
+            A lower-case, stripped string value, or an empty string when absent.
+        """
+        value = getattr(self.profile, profile_field, None)
+        if value is None:
+            return ""
+        return str(value).strip().lower()
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the aggregate.

@@ -308,6 +308,40 @@ def test_system_reports_supported_hvac_capabilities_from_equipment_and_config(
     }
 
 
+def test_system_hvac_capabilities_ignore_ambiguous_profile_strings(
+    system_response: dict[str, Any],
+    energy_response: dict[str, Any],
+) -> None:
+    """Avoid reporting support from incidental profile substrings.
+
+    Args:
+        system_response: Parsed systems fixture.
+        energy_response: Parsed energy fixture.
+    """
+    raw_system = deepcopy(system_response["infinitySystems"][0])
+    raw_system["profile"]["idutype"] = "package"
+    raw_system["profile"]["idusource"] = "none"
+    raw_system["profile"]["odutype"] = "package"
+    raw_system["config"]["cfgfan"] = "off"
+    raw_energy = deepcopy(energy_response["infinityEnergy"])
+    for energy_config in raw_energy["energyConfig"].values():
+        if isinstance(energy_config, dict):
+            energy_config["display"] = False
+            energy_config["enabled"] = False
+    system = System(
+        Profile(raw_system["profile"]),
+        Status(raw_system["status"]),
+        Config(raw_system["config"]),
+        Energy(raw_energy),
+    )
+
+    assert system.supported_hvac_capabilities() == {
+        "heat": False,
+        "cool": False,
+        "fan": False,
+    }
+
+
 def test_safely_get_json_value_handles_nested_lists_none_and_cast_failures() -> None:
     """Resolve nested JSON paths and return None for unsupported paths or casts."""
     payload = {"items": [{"value": "42"}, {"value": "none"}, {"value": "bad"}]}
