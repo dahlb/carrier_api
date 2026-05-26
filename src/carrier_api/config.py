@@ -164,7 +164,7 @@ class ConfigZone:
         reversed_active_periods = reversed(self.today_active_periods())
         for active_period in reversed_active_periods:
             hours, minutes = active_period["time"].split(":")
-            if (int(hours) < now.hour) or (int(hours) == now.hour and int(minutes) < now.minute):
+            if (int(hours) < now.hour) or (int(hours) == now.hour and int(minutes) <= now.minute):
                 return self.find_activity(
                     safely_get_json_value(active_period, "activity", ActivityTypes)
                 )
