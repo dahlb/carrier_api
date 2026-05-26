@@ -92,7 +92,14 @@ Model objects provide `as_dict()` for structured serialization. Their string and
 - `supports_fan()`
 - `supported_hvac_capabilities()`
 
-For zone-level profile resolution, call `ConfigZone.current_status_activity(status_zone)` with the matching `StatusZone` from the same system. This uses Carrier's reported current activity from live status data. Use `ConfigZone.current_scheduled_activity()` when you want the activity implied by schedule and hold configuration instead. `System.as_dict()` performs the status/config pairing for the aggregate system.
+For zone-level profile resolution, call `ConfigZone.current_status_activity(status_zone)` with matching zones from the same system. This uses Carrier's reported current activity type from live status data. Use `ConfigZone.current_scheduled_activity()` when you want the activity implied by schedule and hold configuration instead.
+
+Deprecated compatibility aliases:
+
+- `StatusZone.current_activity` is an alias for `StatusZone.current_status_activity_type`. It returns Carrier's live status-derived activity type/name.
+- `ConfigZone.current_activity()` is an alias for `ConfigZone.current_scheduled_activity()`. It returns the schedule/configuration-derived activity.
+
+To get both activity sources together, use `ConfigZone.as_dict(status_zone)["current_activity"]` or `System.as_dict()["config"]["zones"][...]["current_activity"]`. That object has `from_schedule` and `from_status` keys. `System.as_dict()` performs the status/config pairing for the aggregate system.
 
 `System.as_dict()` includes `supported_hvac_capabilities` and passes status-zone context into config serialization so each zone dictionary includes `current_activity.from_schedule` and `current_activity.from_status`.
 

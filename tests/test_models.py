@@ -84,12 +84,12 @@ def test_status_modes_zone_conditioning_and_serialization(
 
     assert heat_status.mode_const == SystemModes.HEAT
     assert status.zones[0].zone_conditioning_const == SystemModes.HEAT
-    assert status.zones[0].current_status_activity == ActivityTypes.WAKE
+    assert status.zones[0].current_status_activity_type == ActivityTypes.WAKE
     assert status.zones[0].current_activity == ActivityTypes.WAKE
-    assert status.zones[0].as_dict()["current_activity"] == "wake"
-    assert status.zones[0].as_dict()["current_status_activity"] == "wake"
+    assert status.zones[0].as_dict()["current_status_activity_type"] == "wake"
+    assert "current_activity" not in status.zones[0].as_dict()
     status.zones[0].current_activity = ActivityTypes.HOME
-    assert status.zones[0].current_status_activity == ActivityTypes.HOME
+    assert status.zones[0].current_status_activity_type == ActivityTypes.HOME
     assert status.as_dict()["time_stamp"] == datetime(2025, 3, 3, 13, 42, 34, 328000, UTC)
     assert status.as_dict()["uv_lamp_level"] == 100
     assert repr(status.zones[0]) == str(status.zones[0].as_dict())

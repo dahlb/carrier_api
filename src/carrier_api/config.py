@@ -150,7 +150,7 @@ class ConfigZone:
         yet.
 
         Use ``current_status_activity`` when resolving Carrier's live
-        ``StatusZone.current_status_activity`` report instead of the local
+        ``StatusZone.current_status_activity_type`` report instead of the local
         schedule calculation.
 
         Returns:
@@ -178,13 +178,18 @@ class ConfigZone:
     def current_activity(self) -> ConfigZoneActivity | None:
         """Return the schedule-derived current activity.
 
-        This method is a compatibility alias for
-        ``current_scheduled_activity``. Prefer ``current_scheduled_activity``
-        for new code so it is clear the value is computed from local schedule
-        and hold configuration, not Carrier's live status payload.
+        Deprecated:
+            Use ``current_scheduled_activity`` instead. This alias returns the
+            schedule-derived value; it does not return Carrier's
+            live status activity and it does not return the combined
+            ``{"from_schedule": ..., "from_status": ...}`` serialization.
+
+        Use ``as_dict(status_zone)["current_activity"]`` or
+        ``System.as_dict()["config"]["zones"][...]["current_activity"]`` when
+        both schedule-derived and status-derived activity profiles are needed.
 
         Returns:
-            The activity profile implied by schedule/configuration data, or
+            The activity profile implied by schedule data, or
             ``None`` when no active period is available.
         """
         return self.current_scheduled_activity()
@@ -193,7 +198,7 @@ class ConfigZone:
         """Return the activity profile matching Carrier's live status report.
 
         This is status-derived and always resolves the
-        ``StatusZone.current_status_activity`` value Carrier reported for the
+        ``StatusZone.current_status_activity_type`` value Carrier reported for the
         matching zone. It intentionally does not consult local hold state
         because config and status updates can arrive separately.
 
@@ -210,7 +215,7 @@ class ConfigZone:
         """
         if status_zone.api_id != self.api_id:
             return None
-        return self.find_activity(status_zone.current_status_activity)
+        return self.find_activity(status_zone.current_status_activity_type)
 
     def next_activity_time(self) -> str | None:
         """Find the next scheduled activity start time.
@@ -238,7 +243,9 @@ class ConfigZone:
         Args:
             status_zone: Optional runtime status for this zone. When provided,
                 ``current_activity.from_status`` resolves Carrier's live status
-                activity; when omitted, that field is ``None``.
+                activity; when omitted, that field is ``None``. The
+                ``current_activity.from_schedule`` value is always derived from
+                local schedule/hold configuration.
 
         Returns:
             A dictionary containing hold state, occupancy configuration,
