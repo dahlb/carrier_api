@@ -141,6 +141,71 @@ def test_config_schedule_branches_and_serialization(system_response: dict[str, A
     assert str(zone) == str(zone.as_dict())
 
 
+def test_config_zone_current_activity_from_status_uses_api_reported_profile(
+    system_response: dict[str, Any],
+) -> None:
+    """Resolve the current activity profile from Carrier status data.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    raw_system = system_response["infinitySystems"][0]
+    config = Config(raw_system["config"])
+    status = Status(raw_system["status"])
+    zone = config.zones[0]
+    status_zone = status.zones[0]
+
+    current_activity = zone.current_status_activity(status_zone)
+
+    assert current_activity is not None
+    assert current_activity.type == ActivityTypes.WAKE
+    assert current_activity is zone.find_activity(ActivityTypes.WAKE)
+
+
+def test_config_zone_current_activity_from_status_prefers_hold_activity(
+    system_response: dict[str, Any],
+) -> None:
+    """Resolve held zones through the configured hold profile.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    raw_system = system_response["infinitySystems"][0]
+    raw_config = deepcopy(raw_system["config"])
+    raw_status = deepcopy(raw_system["status"])
+    raw_config["zones"][0]["hold"] = "on"
+    raw_config["zones"][0]["holdActivity"] = "manual"
+    raw_status["zones"][0]["currentActivity"] = "wake"
+    config = Config(raw_config)
+    status = Status(raw_status)
+    zone = config.zones[0]
+
+    current_activity = zone.current_status_activity(status.zones[0])
+
+    assert current_activity is not None
+    assert current_activity.type == ActivityTypes.MANUAL
+
+
+def test_config_zone_current_activity_from_status_returns_none_for_missing_profile(
+    system_response: dict[str, Any],
+) -> None:
+    """Return no profile when Carrier reports an activity not present in config.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    raw_system = system_response["infinitySystems"][0]
+    raw_config = deepcopy(raw_system["config"])
+    raw_status = deepcopy(raw_system["status"])
+    raw_config["zones"][0]["activities"] = [
+        activity for activity in raw_config["zones"][0]["activities"] if activity["type"] != "wake"
+    ]
+    config = Config(raw_config)
+    status = Status(raw_status)
+
+    assert config.zones[0].current_status_activity(status.zones[0]) is None
+
+
 def test_config_next_activity_time_returns_none_when_today_and_tomorrow_are_disabled() -> None:
     """Return no next activity time when today and tomorrow have no enabled periods."""
     zone = ConfigZone(
@@ -201,6 +266,26 @@ def test_system_as_dict_uses_nested_model_dictionaries(
     assert system.as_dict()["config"] == system.config.as_dict()
     assert system.as_dict()["energy"] == system.energy.as_dict()
     assert repr(system) == str(system.as_dict())
+
+
+def test_system_reports_supported_hvac_capabilities(
+    systems: list[System],
+) -> None:
+    """Expose supported heat, cool, and fan controls from energy config.
+
+    Args:
+        systems: Prepared system fixture models.
+    """
+    system = systems[0]
+
+    assert system.supports_heat()
+    assert system.supports_cool()
+    assert not system.supports_fan()
+    assert system.supported_hvac_capabilities() == {
+        "heat": True,
+        "cool": True,
+        "fan": False,
+    }
 
 
 def test_safely_get_json_value_handles_nested_lists_none_and_cast_failures() -> None:

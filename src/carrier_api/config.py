@@ -2,10 +2,13 @@
 
 from datetime import UTC, datetime
 from logging import getLogger
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .const import ActivityTypes, FanModes
 from .util import safely_get_json_value
+
+if TYPE_CHECKING:
+    from .status import StatusZone
 
 _LOGGER = getLogger(__name__)
 
@@ -165,6 +168,21 @@ class ConfigZone:
         return self.find_activity(
             safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityTypes)
         )
+
+    def current_status_activity(self, status_zone: StatusZone) -> ConfigZoneActivity | None:
+        """Return the activity profile currently reported for a status zone.
+
+        Args:
+            status_zone: Runtime zone status containing Carrier's current
+                activity value.
+
+        Returns:
+            The configured activity matching the current runtime status, or
+            ``None`` when Carrier reports an activity missing from this zone's
+            configuration.
+        """
+        activity_type = self.hold_activity if self.hold else status_zone.current_activity
+        return self.find_activity(activity_type)
 
     def next_activity_time(self) -> str | None:
         """Find the next scheduled activity start time.

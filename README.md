@@ -85,6 +85,15 @@ asyncio.run(main())
 
 Model objects provide `as_dict()` for structured serialization. Their string and repr forms are intended for readable debugging output.
 
+`System` also exposes HVAC capability helpers:
+
+- `supports_heat()`
+- `supports_cool()`
+- `supports_fan()`
+- `supported_hvac_capabilities()`
+
+For zone-level profile resolution, call `ConfigZone.current_status_activity(status_zone)` with the matching `StatusZone`. This uses Carrier's reported current activity when the zone is not held, and the configured hold activity when a hold is active.
+
 ## Updating Thermostat Settings
 
 Mutation helpers send Carrier configuration updates and then request websocket reconciliation when a websocket manager is available.
