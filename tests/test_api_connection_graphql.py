@@ -474,6 +474,93 @@ async def test_refresh_auth_token_treats_invalid_grant_as_auth_error() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [None, ["invalid_grant"], "invalid_grant"])
+async def test_refresh_auth_token_ignores_non_object_error_payloads(
+    payload: object,
+) -> None:
+    """Keep non-object refresh error payloads in the refresh-failure bucket.
+
+    Args:
+        payload: Non-object JSON payload returned by the fake response.
+    """
+    refresh_error = ClientResponseError(
+        request_info=None,  # type: ignore[arg-type]
+        history=(),
+        status=400,
+        message="bad request",
+    )
+
+    class NonObjectErrorResponse(FakeResponse):
+        """Response double that returns a non-object OAuth error payload."""
+
+        def raise_for_status(self) -> None:
+            """Raise the configured bad request response error."""
+            raise refresh_error
+
+        async def json(self) -> Any:
+            """Return the configured non-object JSON payload.
+
+            Returns:
+                The configured non-object payload.
+            """
+            return payload
+
+    session = FakeSession()
+    session.response = NonObjectErrorResponse({})
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", session),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
+        await connection.refresh_auth_token()
+
+    assert error.value.__cause__ is refresh_error
+
+
+@pytest.mark.asyncio
+async def test_refresh_auth_token_normalizes_malformed_error_payload() -> None:
+    """Keep malformed refresh error payloads normalized as Carrier errors."""
+    refresh_error = ClientResponseError(
+        request_info=None,  # type: ignore[arg-type]
+        history=(),
+        status=400,
+        message="bad request",
+    )
+
+    class MalformedErrorResponse(FakeResponse):
+        """Response double that raises while decoding the OAuth error payload."""
+
+        def raise_for_status(self) -> None:
+            """Raise the configured bad request response error."""
+            raise refresh_error
+
+        async def json(self) -> dict[str, Any]:
+            """Raise a JSON decode-style failure.
+
+            Raises:
+                ValueError: Always raised for this malformed response.
+            """
+            raise ValueError("invalid json")
+
+    session = FakeSession()
+    session.response = MalformedErrorResponse({})
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", session),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
+        await connection.refresh_auth_token()
+
+    assert error.value.__cause__ is refresh_error
+
+
+@pytest.mark.asyncio
 async def test_check_auth_expiration_logs_in_then_refreshes_when_expired(
     connection: SpyConnection,
 ) -> None:

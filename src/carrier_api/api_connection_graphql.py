@@ -49,6 +49,25 @@ def _is_auth_transport_error(error: BaseException) -> bool:
     return isinstance(error, TransportServerError) and error.code in _AUTH_HTTP_STATUSES
 
 
+async def _response_json_object(response: Any) -> dict[str, Any]:
+    """Read a JSON object response body when available.
+
+    Args:
+        response: aiohttp-like response object with an async ``json`` method.
+
+    Returns:
+        The decoded JSON object, or an empty object when the body is malformed
+        or is not a JSON object.
+    """
+    try:
+        data = await response.json()
+    except ClientError, TypeError, ValueError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
 class ApiConnectionGraphql:
     """Async Carrier GraphQL API connection with token and websocket support."""
 
@@ -166,18 +185,19 @@ class ApiConnectionGraphql:
             "refresh_token": self.refresh_token,
             "scope": "offline_access",
         }
-        data: dict[str, Any] = {}
+        response: Any | None = None
         try:
             response = await self.api_session.post(url=url, data=json_body)
-            data = await response.json()
             response.raise_for_status()
+            data = await response.json()
         except ClientResponseError as error:
+            data = {} if response is None else await _response_json_object(response)
             if error.status in {401, 403} or (
                 error.status == 400 and data.get("error") == "invalid_grant"
             ):
                 raise CarrierApiAuthError("Carrier token refresh was rejected") from error
             raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
-        except (ClientError, TimeoutError, OSError) as error:
+        except (ClientError, TimeoutError, OSError, TypeError, ValueError) as error:
             raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
         self.expires_at = datetime.now(UTC) + timedelta(seconds=data["expires_in"])
         self.token_type = data["token_type"]

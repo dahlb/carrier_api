@@ -129,10 +129,19 @@ class ApiWebsocket:
                                 except (ClientError, TimeoutError, OSError) as error:
                                     raise _CallbackError(error) from error
                         elif msg.type == WSMsgType.ERROR:
-                            break
+                            websocket_error = self.websocket.exception()
+                            if websocket_error is None:
+                                raise CarrierApiWebsocketError(
+                                    "Carrier websocket connection failed"
+                                )
+                            raise CarrierApiWebsocketError(
+                                "Carrier websocket connection failed"
+                            ) from websocket_error
                 _LOGGER.debug("ws: closed")
         except _CallbackError as error:
             raise error.error from None
+        except CarrierApiWebsocketError:
+            raise
         except (ClientError, TimeoutError, OSError) as error:
             raise CarrierApiWebsocketError("Carrier websocket connection failed") from error
         finally:
