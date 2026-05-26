@@ -61,7 +61,7 @@ async def _response_json_object(response: Any) -> dict[str, Any]:
     """
     try:
         data = await response.json()
-    except ClientError, TypeError, ValueError:
+    except ClientError, TimeoutError, OSError, TypeError, ValueError:
         return {}
     if not isinstance(data, dict):
         return {}
@@ -100,7 +100,10 @@ class ApiConnectionGraphql:
 
     async def cleanup(self) -> None:
         """Close the underlying aiohttp session owned by the connection."""
-        await self.api_session.close()
+        try:
+            await self.api_session.close()
+        except (ClientError, TimeoutError, OSError) as error:
+            raise CarrierApiConnectionError("Carrier API session cleanup failed") from error
 
     async def login(self) -> None:
         """Authenticate with Carrier and initialize websocket support.

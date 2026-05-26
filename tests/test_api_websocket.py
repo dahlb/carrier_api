@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import cast
 
-from aiohttp import ClientConnectionError, ClientSession, WSMsgType
+from aiohttp import ClientConnectionError, ClientError, ClientSession, WSMsgType
 import pytest
 
 from carrier_api import ApiConnectionGraphql, ApiWebsocket, CarrierApiWebsocketError
@@ -191,7 +191,7 @@ class FakeListenerSession:
 class FailingListenerSession:
     """Session that fails websocket connection attempts."""
 
-    def __init__(self, error: ClientConnectionError) -> None:
+    def __init__(self, error: ClientError | TimeoutError | OSError) -> None:
         """Initialize the session with the error to raise.
 
         Args:
@@ -206,7 +206,8 @@ class FailingListenerSession:
             url: Websocket URL.
 
         Raises:
-            ClientConnectionError: Always raised for this failing session.
+            ClientError | TimeoutError | OSError: Always raised for this
+                failing session.
         """
         raise self.error
 
@@ -234,7 +235,7 @@ class FakeListenerConnection(DummyApiConnectionGraphql):
 class FailingListenerConnection(DummyApiConnectionGraphql):
     """Connection double with a failing websocket session."""
 
-    def __init__(self, error: ClientConnectionError) -> None:
+    def __init__(self, error: ClientError | TimeoutError | OSError) -> None:
         """Initialize fake connection state.
 
         Args:
@@ -311,9 +312,18 @@ async def test_listener_dispatches_text_and_closes_on_close_command() -> None:
 
 
 @pytest.mark.asyncio
-async def test_listener_wraps_websocket_connection_errors() -> None:
+@pytest.mark.parametrize(
+    "connection_error",
+    [
+        ClientConnectionError("websocket unavailable"),
+        TimeoutError("websocket timed out"),
+        OSError("websocket socket failed"),
+    ],
+)
+async def test_listener_wraps_websocket_connection_errors(
+    connection_error: ClientError | TimeoutError | OSError,
+) -> None:
     """Raise Carrier websocket errors instead of raw aiohttp connection errors."""
-    connection_error = ClientConnectionError("websocket unavailable")
     connection = FailingListenerConnection(connection_error)
     api_websocket = ApiWebsocket(connection)
 
@@ -325,13 +335,22 @@ async def test_listener_wraps_websocket_connection_errors() -> None:
 
 
 @pytest.mark.asyncio
-async def test_listener_does_not_wrap_callback_connection_errors() -> None:
+@pytest.mark.parametrize(
+    "callback_error",
+    [
+        ClientConnectionError("callback request failed"),
+        TimeoutError("callback timed out"),
+        OSError("callback socket failed"),
+    ],
+)
+async def test_listener_does_not_wrap_callback_connection_errors(
+    callback_error: ClientError | TimeoutError | OSError,
+) -> None:
     """Let callback I/O errors propagate instead of marking websocket failed."""
     websocket = FakeListenerWebsocket([SimpleNamespace(type=WSMsgType.TEXT, data="payload")])
     connection = FakeListenerConnection(websocket)
     heartbeat_task = FakeHeartbeatTask()
     api_websocket = FakeHeartbeatApiWebsocket(connection, heartbeat_task)
-    callback_error = ClientConnectionError("callback request failed")
 
     async def fail_callback(message: str) -> None:
         """Raise the configured callback I/O error.
@@ -340,13 +359,14 @@ async def test_listener_does_not_wrap_callback_connection_errors() -> None:
             message: Raw websocket text.
 
         Raises:
-            ClientConnectionError: Always raised for this callback.
+            ClientError | TimeoutError | OSError: Always raised for this
+                callback.
         """
         raise callback_error
 
     api_websocket.callback_add(fail_callback)
 
-    with pytest.raises(ClientConnectionError) as error:
+    with pytest.raises(type(callback_error)) as error:
         await api_websocket.listener()
 
     assert error.value is callback_error
@@ -358,7 +378,12 @@ async def test_listener_does_not_wrap_callback_connection_errors() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "websocket_error",
-    [ClientConnectionError("websocket receive failed"), None],
+    [
+        ClientConnectionError("websocket receive failed"),
+        TimeoutError("websocket receive timed out"),
+        OSError("websocket receive socket failed"),
+        None,
+    ],
 )
 async def test_listener_raises_websocket_error_messages(
     websocket_error: BaseException | None,

@@ -400,6 +400,48 @@ async def test_cleanup_closes_provided_session() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "cleanup_error",
+    [
+        ClientConnectionError("cleanup connection failed"),
+        TimeoutError("cleanup timed out"),
+        OSError("cleanup socket failed"),
+    ],
+)
+async def test_cleanup_wraps_session_close_errors(
+    cleanup_error: ClientError | TimeoutError | OSError,
+) -> None:
+    """Raise Carrier connection errors instead of raw session cleanup errors.
+
+    Args:
+        cleanup_error: Error raised by the fake session close.
+    """
+
+    class FailingCloseSession(FakeSession):
+        """Session double that fails during cleanup."""
+
+        async def close(self) -> None:
+            """Raise the configured cleanup error.
+
+            Raises:
+                ClientError | TimeoutError | OSError: Always raised for this
+                    failing session.
+            """
+            raise cleanup_error
+
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FailingCloseSession()),
+    )
+
+    with pytest.raises(errors.CarrierApiConnectionError) as error:
+        await connection.cleanup()
+
+    assert error.value.__cause__ is cleanup_error
+
+
+@pytest.mark.asyncio
 async def test_refresh_auth_token_updates_token_state() -> None:
     """Refresh auth tokens from the OAuth response payload."""
     session = FakeSession()
@@ -427,9 +469,18 @@ async def test_refresh_auth_token_updates_token_state() -> None:
 
 
 @pytest.mark.asyncio
-async def test_refresh_auth_token_wraps_refresh_failures() -> None:
+@pytest.mark.parametrize(
+    "refresh_error",
+    [
+        ClientConnectionError("token refresh connection failed"),
+        TimeoutError("token refresh timed out"),
+        OSError("token refresh socket failed"),
+    ],
+)
+async def test_refresh_auth_token_wraps_refresh_failures(
+    refresh_error: ClientError | TimeoutError | OSError,
+) -> None:
     """Raise Carrier token refresh errors instead of raw HTTP exceptions."""
-    refresh_error = TimeoutError("token refresh timed out")
 
     class FailingSession(FakeSession):
         """Session double that fails token refresh requests."""
@@ -442,7 +493,8 @@ async def test_refresh_auth_token_wraps_refresh_failures() -> None:
                 data: Submitted form data.
 
             Raises:
-                TimeoutError: Always raised for this failing session.
+                ClientError | TimeoutError | OSError: Always raised for this
+                    failing session.
             """
             raise refresh_error
 
@@ -483,6 +535,48 @@ async def test_refresh_auth_token_treats_auth_rejections_as_auth_error(
 
     session = FakeSession()
     session.response = FakeResponse(payload, status_error=refresh_error)
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", session),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiAuthError) as error:
+        await connection.refresh_auth_token()
+
+    assert error.value.__cause__ is refresh_error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "json_error",
+    [
+        TimeoutError("refresh error body timed out"),
+        OSError("refresh error body socket failed"),
+    ],
+)
+async def test_refresh_auth_token_normalizes_unreadable_error_payloads(
+    json_error: TimeoutError | OSError,
+) -> None:
+    """Raise Carrier errors when refresh error payload reads fail.
+
+    Args:
+        json_error: Error raised while reading the refresh error response body.
+    """
+    refresh_error = ClientResponseError(
+        request_info=None,  # type: ignore[arg-type]
+        history=(),
+        status=401,
+        message="unauthorized",
+    )
+
+    session = FakeSession()
+    session.response = FakeResponse(
+        {},
+        status_error=refresh_error,
+        json_error=json_error,
+    )
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
@@ -641,6 +735,40 @@ async def test_login_wraps_graphql_query_errors(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "transport_error",
+    [
+        ClientConnectionError("connection failed"),
+        TimeoutError("connection timed out"),
+        OSError("socket failed"),
+    ],
+)
+async def test_login_wraps_connection_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    transport_error: ClientError | TimeoutError | OSError,
+) -> None:
+    """Raise Carrier connection errors instead of raw login transport exceptions.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+        transport_error: Network or transport exception raised by the fake client.
+    """
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+
+    with pytest.raises(errors.CarrierApiConnectionError) as error:
+        await connection.login()
+
+    assert error.value.__cause__ is transport_error
+
+
+@pytest.mark.asyncio
 async def test_authed_query_wraps_graphql_query_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -680,11 +808,13 @@ async def test_authed_query_wraps_graphql_query_errors(
     [
         TransportServerError("server unavailable", code=503),
         ClientConnectionError("connection failed"),
+        TimeoutError("connection timed out"),
+        OSError("socket failed"),
     ],
 )
 async def test_authed_query_wraps_connection_errors(
     monkeypatch: pytest.MonkeyPatch,
-    transport_error: Exception,
+    transport_error: Exception | TimeoutError | OSError,
 ) -> None:
     """Raise Carrier connection errors instead of raw network exceptions.
 
@@ -779,6 +909,47 @@ async def test_query_helpers_send_expected_operation_and_variables(
         ("getInfinitySystems", {"userName": "user@example.com"}),
         ("getInfinityEnergy", {"serial": "SERIAL"}),
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "transport_error"),
+    [
+        ("get_user_info", TimeoutError("get user timed out")),
+        ("get_user_info", OSError("get user socket failed")),
+        ("load_data", TimeoutError("load data timed out")),
+        ("load_data", OSError("load data socket failed")),
+    ],
+)
+async def test_public_query_helpers_preserve_connection_error_normalization(
+    monkeypatch: pytest.MonkeyPatch,
+    method_name: str,
+    transport_error: TimeoutError | OSError,
+) -> None:
+    """Keep public query helpers from leaking raw network exceptions.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+        method_name: Public helper method called by API consumers.
+        transport_error: Network exception raised by the fake client.
+    """
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    connection.refresh_token = "refresh"
+    connection.token_type = "Bearer"
+    connection.access_token = "access"
+    connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+    with pytest.raises(errors.CarrierApiConnectionError) as error:
+        await getattr(connection, method_name)()
+
+    assert error.value.__cause__ is transport_error
 
 
 @pytest.mark.asyncio
