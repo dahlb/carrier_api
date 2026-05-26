@@ -78,17 +78,15 @@ class System:
         """Return whether available Carrier data suggests fan support.
 
         Carrier does not expose a typed fan capability enum here. This helper
-        treats the config fan setting as authoritative when Carrier provides
-        it. Energy reporting flags are only used as a fallback when the config
-        payload omits a fan control flag.
+        uses configured zone activity fan controls first. Energy reporting
+        flags are only a fallback when no activity fan data is available.
 
         Returns:
-            ``True`` when configuration indicates fan control is available, or
-            when energy data reports fan support and configuration has no fan
-            control flag.
+            ``True`` when configuration or energy data suggests fan control is
+            available.
         """
-        if self.config.fan_enabled is not None:
-            return self.config.fan_enabled
+        if self._config_supports_fan_control():
+            return True
         return self._supports_any_energy_capability(FAN_CAPABILITY_FIELDS)
 
     def supported_hvac_capabilities(self) -> dict[str, bool]:
@@ -118,6 +116,18 @@ class System:
         return any(
             getattr(self.energy, capability_field, False) is True
             for capability_field in capability_fields
+        )
+
+    def _config_supports_fan_control(self) -> bool:
+        """Return whether zone activities expose fan control values.
+
+        Returns:
+            ``True`` when any configured activity has a parsed fan mode.
+        """
+        return any(
+            activity.fan is not None
+            for zone in self.config.zones or []
+            for activity in zone.activities or []
         )
 
     def _profile_supports_heat(self) -> bool:

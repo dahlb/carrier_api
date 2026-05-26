@@ -347,7 +347,7 @@ def test_system_hvac_capabilities_ignore_ambiguous_profile_strings(
     raw_system["profile"]["idutype"] = "package"
     raw_system["profile"]["idusource"] = "none"
     raw_system["profile"]["odutype"] = "package"
-    raw_system["config"]["cfgfan"] = "off"
+    raw_system["config"]["zones"] = []
     raw_energy = deepcopy(energy_response["infinityEnergy"])
     for energy_config in raw_energy["energyConfig"].values():
         if isinstance(energy_config, dict):
@@ -367,21 +367,21 @@ def test_system_hvac_capabilities_ignore_ambiguous_profile_strings(
     }
 
 
-def test_system_hvac_capabilities_do_not_let_energy_override_config_fan_off(
+def test_system_hvac_capabilities_use_activity_fan_controls_when_cfgfan_is_off(
     systems: list[System],
 ) -> None:
-    """Treat config fan control as authoritative over fan energy telemetry.
+    """Treat configured activity fan modes as stronger fan support evidence.
 
     Args:
         systems: Prepared system fixture models.
     """
     system = systems[0]
     system.config.fan_enabled = False
-    system.energy.fan = True
-    system.energy.fan_gas = True
+    system.energy.fan = False
+    system.energy.fan_gas = False
 
-    assert not system.supports_fan()
-    assert not system.supported_hvac_capabilities()["fan"]
+    assert system.supports_fan()
+    assert system.supported_hvac_capabilities()["fan"]
 
 
 def test_safely_get_json_value_handles_nested_lists_none_and_cast_failures() -> None:
