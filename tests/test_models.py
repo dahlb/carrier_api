@@ -85,6 +85,8 @@ def test_status_modes_zone_conditioning_and_serialization(
     assert heat_status.mode_const == SystemModes.HEAT
     assert status.zones[0].zone_conditioning_const == SystemModes.HEAT
     assert status.zones[0].current_status_activity == ActivityTypes.WAKE
+    assert status.zones[0].current_activity == ActivityTypes.WAKE
+    assert status.zones[0].as_dict()["current_activity"] == "wake"
     assert status.zones[0].as_dict()["current_status_activity"] == "wake"
     assert status.as_dict()["time_stamp"] == datetime(2025, 3, 3, 13, 42, 34, 328000, UTC)
     assert status.as_dict()["uv_lamp_level"] == 100
@@ -135,6 +137,7 @@ def test_config_schedule_branches_and_serialization(system_response: dict[str, A
     assert zone.today_active_periods()
     assert zone.yesterday_active_periods()
     assert zone.current_scheduled_activity() is not None
+    assert zone.current_activity() is zone.current_scheduled_activity()
     assert held_zone.current_scheduled_activity() is held_zone.find_activity(ActivityTypes.MANUAL)
     assert zone.next_activity_time() is not None
     assert config.humidifier_heat_target == 35
@@ -171,10 +174,10 @@ def test_config_zone_current_activity_from_status_uses_api_reported_profile(
     }
 
 
-def test_config_zone_current_activity_from_status_prefers_hold_activity(
+def test_config_zone_current_activity_from_status_uses_status_when_config_hold_lags(
     system_response: dict[str, Any],
 ) -> None:
-    """Resolve held zones through the configured hold profile.
+    """Resolve status activity from status data even when config hold state lags.
 
     Args:
         system_response: Parsed systems fixture.
@@ -192,7 +195,7 @@ def test_config_zone_current_activity_from_status_prefers_hold_activity(
     current_status_activity = zone.current_status_activity(status.zones[0])
 
     assert current_status_activity is not None
-    assert current_status_activity.type == ActivityTypes.MANUAL
+    assert current_status_activity.type == ActivityTypes.WAKE
 
 
 def test_config_zone_current_activity_from_status_returns_none_for_missing_profile(
@@ -280,10 +283,10 @@ def test_system_as_dict_uses_nested_model_dictionaries(
     assert repr(system) == str(system.as_dict())
 
 
-def test_system_reports_supported_hvac_capabilities(
+def test_system_reports_supported_hvac_capabilities_from_equipment_and_config(
     systems: list[System],
 ) -> None:
-    """Expose supported heat, cool, and fan controls from energy config.
+    """Expose supported heat, cool, and fan controls from best-known raw data.
 
     Args:
         systems: Prepared system fixture models.
@@ -292,16 +295,16 @@ def test_system_reports_supported_hvac_capabilities(
 
     assert system.supports_heat()
     assert system.supports_cool()
-    assert not system.supports_fan()
+    assert system.supports_fan()
     assert system.supported_hvac_capabilities() == {
         "heat": True,
         "cool": True,
-        "fan": False,
+        "fan": True,
     }
     assert system.as_dict()["supported_hvac_capabilities"] == {
         "heat": True,
         "cool": True,
-        "fan": False,
+        "fan": True,
     }
 
 

@@ -13,6 +13,18 @@ _LOGGER = getLogger(__name__)
 HEAT_CAPABILITY_FIELDS = ("electric_heat", "gas", "hp_heat", "loop_pump", "reheat")
 COOL_CAPABILITY_FIELDS = ("cooling", "loop_pump")
 FAN_CAPABILITY_FIELDS = ("fan", "fan_gas")
+HEAT_PROFILE_FIELDS = ("indoor_unit_source", "indoor_unit_type", "outdoor_unit_type")
+COOL_PROFILE_FIELDS = ("outdoor_unit_type",)
+HEAT_PROFILE_TOKENS = (
+    "electric",
+    "fan coil",
+    "fancoil",
+    "furnace",
+    "gas",
+    "heat",
+    "hp",
+)
+COOL_PROFILE_TOKENS = ("ac", "cool", "hp")
 
 
 class System:
@@ -42,28 +54,34 @@ class System:
         """Return whether the system reports heating capability.
 
         Returns:
-            ``True`` when any parsed heating energy capability is displayable
-            and enabled.
+            ``True`` when equipment metadata or energy configuration indicates
+            the system has a heat-capable component.
         """
-        return self._supports_any_energy_capability(HEAT_CAPABILITY_FIELDS)
+        return self._profile_contains_any(HEAT_PROFILE_FIELDS, HEAT_PROFILE_TOKENS) or (
+            self._supports_any_energy_capability(HEAT_CAPABILITY_FIELDS)
+        )
 
     def supports_cool(self) -> bool:
         """Return whether the system reports cooling capability.
 
         Returns:
-            ``True`` when any parsed cooling energy capability is displayable
-            and enabled.
+            ``True`` when equipment metadata or energy configuration indicates
+            the system has a cool-capable component.
         """
-        return self._supports_any_energy_capability(COOL_CAPABILITY_FIELDS)
+        return self._profile_contains_any(COOL_PROFILE_FIELDS, COOL_PROFILE_TOKENS) or (
+            self._supports_any_energy_capability(COOL_CAPABILITY_FIELDS)
+        )
 
     def supports_fan(self) -> bool:
         """Return whether the system reports fan-only capability.
 
         Returns:
-            ``True`` when any parsed fan energy capability is displayable and
-            enabled.
+            ``True`` when configuration or energy data indicates fan control is
+            available.
         """
-        return self._supports_any_energy_capability(FAN_CAPABILITY_FIELDS)
+        return (self.config.fan_enabled is True) or (
+            self._supports_any_energy_capability(FAN_CAPABILITY_FIELDS)
+        )
 
     def supported_hvac_capabilities(self) -> dict[str, bool]:
         """Return supported heat, cool, and fan controls.
@@ -90,6 +108,24 @@ class System:
         return any(
             getattr(self.energy, capability_field, False) is True
             for capability_field in capability_fields
+        )
+
+    def _profile_contains_any(
+        self, profile_fields: tuple[str, ...], capability_tokens: tuple[str, ...]
+    ) -> bool:
+        """Return whether profile equipment metadata contains capability hints.
+
+        Args:
+            profile_fields: Profile attribute names to inspect.
+            capability_tokens: Case-insensitive substrings that imply support.
+
+        Returns:
+            ``True`` when any named profile field contains a capability token.
+        """
+        return any(
+            capability_token in str(getattr(self.profile, profile_field, "")).lower()
+            for profile_field in profile_fields
+            for capability_token in capability_tokens
         )
 
     def as_dict(self) -> dict[str, Any]:

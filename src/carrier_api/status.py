@@ -38,6 +38,20 @@ class StatusZone:
         self.damper_position: int = safely_get_json_value(status_zone_json, "damperposition", int)
 
     @property
+    def current_activity(self) -> ActivityTypes:
+        """Return Carrier's live current activity report.
+
+        This property is a compatibility alias for
+        ``current_status_activity``. Prefer ``current_status_activity`` for new
+        code so this runtime value is not confused with the schedule-derived
+        ``ConfigZone.current_scheduled_activity`` helper.
+
+        Returns:
+            Carrier's reported current activity for this status zone.
+        """
+        return self.current_status_activity
+
+    @property
     def zone_conditioning_const(self) -> SystemModes:
         """Map Carrier zone conditioning text to a system mode constant.
 
@@ -65,6 +79,7 @@ class StatusZone:
         return {
             "id": self.api_id,
             "name": self.name,
+            "current_activity": self.current_status_activity.value,
             "current_status_activity": self.current_status_activity.value,
             "temperature": self.temperature,
             "humidity": self.humidity,

@@ -175,13 +175,27 @@ class ConfigZone:
             safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityTypes)
         )
 
+    def current_activity(self) -> ConfigZoneActivity | None:
+        """Return the schedule-derived current activity.
+
+        This method is a compatibility alias for
+        ``current_scheduled_activity``. Prefer ``current_scheduled_activity``
+        for new code so it is clear the value is computed from local schedule
+        and hold configuration, not Carrier's live status payload.
+
+        Returns:
+            The activity profile implied by schedule/configuration data, or
+            ``None`` when no active period is available.
+        """
+        return self.current_scheduled_activity()
+
     def current_status_activity(self, status_zone: StatusZone) -> ConfigZoneActivity | None:
         """Return the activity profile matching Carrier's live status report.
 
-        This is status-derived. For non-held zones, it resolves the
+        This is status-derived and always resolves the
         ``StatusZone.current_status_activity`` value Carrier reported for the
-        matching zone. For held zones, it resolves the configured hold activity
-        so local hold state remains authoritative for the selected profile.
+        matching zone. It intentionally does not consult local hold state
+        because config and status updates can arrive separately.
 
         Args:
             status_zone: Runtime zone status containing Carrier's reported
@@ -192,8 +206,7 @@ class ConfigZone:
             ``None`` when that activity is missing from this zone's
             configuration.
         """
-        activity_type = self.hold_activity if self.hold else status_zone.current_status_activity
-        return self.find_activity(activity_type)
+        return self.find_activity(status_zone.current_status_activity)
 
     def next_activity_time(self) -> str | None:
         """Find the next scheduled activity start time.
@@ -279,6 +292,7 @@ class Config:
     etag: str | None = None
     fuel_type: str | None = None
     gas_unit: str | None = None
+    fan_enabled: bool | None = None
     zones: list[ConfigZone]
     uv_enabled: bool | None = None
     humidifier_enabled: bool | None = None
@@ -300,6 +314,7 @@ class Config:
         self.etag = safely_get_json_value(self.raw, "etag")
         self.fuel_type = safely_get_json_value(self.raw, "fueltype")
         self.gas_unit = safely_get_json_value(self.raw, "gasunit")
+        self.fan_enabled = safely_get_json_value(self.raw, "cfgfan") == "on"
         self.uv_enabled = safely_get_json_value(self.raw, "cfguv") == "on"
         self.humidifier_enabled = safely_get_json_value(self.raw, "cfghumid") == "on"
         self.humidifier_heat_target = safely_get_json_value(self.raw, "humidityHome.rhtg", int)
@@ -331,6 +346,7 @@ class Config:
             "temperature_unit": self.temperature_unit,
             "mode": self.mode,
             "heat_source": self.heat_source,
+            "fan_enabled": self.fan_enabled,
             "zones": [
                 zone.as_dict(status_zones_by_id.get(zone.api_id)) for zone in self.zones or []
             ],
