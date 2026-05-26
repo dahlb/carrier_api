@@ -10,9 +10,11 @@ from .errors import (
     AuthError,
     BaseError,
     CarrierApiAuthError,
+    CarrierApiConnectionError,
     CarrierApiError,
     CarrierApiGraphqlError,
     CarrierApiTokenRefreshError,
+    CarrierApiWebsocketError,
 )
 from .profile import Profile
 from .status import Status, StatusZone
@@ -25,9 +27,11 @@ __all__ = [
     "AuthError",
     "BaseError",
     "CarrierApiAuthError",
+    "CarrierApiConnectionError",
     "CarrierApiError",
     "CarrierApiGraphqlError",
     "CarrierApiTokenRefreshError",
+    "CarrierApiWebsocketError",
     "Config",
     "ConfigZone",
     "ConfigZoneActivity",

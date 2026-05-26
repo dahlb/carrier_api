@@ -4,10 +4,10 @@ from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import cast
 
-from aiohttp import ClientSession, WSMsgType
+from aiohttp import ClientConnectionError, ClientSession, WSMsgType
 import pytest
 
-from carrier_api import ApiConnectionGraphql, ApiWebsocket
+from carrier_api import ApiConnectionGraphql, ApiWebsocket, CarrierApiWebsocketError
 
 
 class DummyApiConnectionGraphql(ApiConnectionGraphql):
@@ -174,6 +174,29 @@ class FakeListenerSession:
         return FakeWebsocketContext(self.websocket)
 
 
+class FailingListenerSession:
+    """Session that fails websocket connection attempts."""
+
+    def __init__(self, error: ClientConnectionError) -> None:
+        """Initialize the session with the error to raise.
+
+        Args:
+            error: Connection error raised by ``ws_connect``.
+        """
+        self.error = error
+
+    def ws_connect(self, url: str) -> FakeWebsocketContext:
+        """Raise the configured websocket connection error.
+
+        Args:
+            url: Websocket URL.
+
+        Raises:
+            ClientConnectionError: Always raised for this failing session.
+        """
+        raise self.error
+
+
 class FakeListenerConnection(DummyApiConnectionGraphql):
     """Connection double with auth and websocket session behavior."""
 
@@ -186,6 +209,26 @@ class FakeListenerConnection(DummyApiConnectionGraphql):
         super().__init__()
         self.access_token = "token"
         self.listener_session = FakeListenerSession(websocket)
+        self.api_session = cast("ClientSession", self.listener_session)
+        self.auth_checked = False
+
+    async def check_auth_expiration(self) -> None:
+        """Record auth expiration checks."""
+        self.auth_checked = True
+
+
+class FailingListenerConnection(DummyApiConnectionGraphql):
+    """Connection double with a failing websocket session."""
+
+    def __init__(self, error: ClientConnectionError) -> None:
+        """Initialize fake connection state.
+
+        Args:
+            error: Connection error raised by the fake session.
+        """
+        super().__init__()
+        self.access_token = "token"
+        self.listener_session = FailingListenerSession(error)
         self.api_session = cast("ClientSession", self.listener_session)
         self.auth_checked = False
 
@@ -251,6 +294,20 @@ async def test_listener_dispatches_text_and_closes_on_close_command() -> None:
     assert heartbeat_task.cancelled
     assert api_websocket.websocket is None
     assert api_websocket.task_heartbeat is None
+
+
+@pytest.mark.asyncio
+async def test_listener_wraps_websocket_connection_errors() -> None:
+    """Raise Carrier websocket errors instead of raw aiohttp connection errors."""
+    connection_error = ClientConnectionError("websocket unavailable")
+    connection = FailingListenerConnection(connection_error)
+    api_websocket = ApiWebsocket(connection)
+
+    with pytest.raises(CarrierApiWebsocketError) as error:
+        await api_websocket.listener()
+
+    assert connection.auth_checked
+    assert error.value.__cause__ is connection_error
 
 
 @pytest.mark.asyncio

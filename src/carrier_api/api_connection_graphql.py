@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from logging import getLogger
 from typing import Any, Literal
 
-from aiohttp import ClientError, ClientSession
+from aiohttp import ClientError, ClientResponseError, ClientSession
 from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import TransportError as GraphqlTransportError, TransportQueryError
@@ -14,7 +14,12 @@ from .api_websocket import ApiWebsocket
 from .config import Config
 from .const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from .energy import Energy
-from .errors import CarrierApiAuthError, CarrierApiGraphqlError, CarrierApiTokenRefreshError
+from .errors import (
+    CarrierApiAuthError,
+    CarrierApiConnectionError,
+    CarrierApiGraphqlError,
+    CarrierApiTokenRefreshError,
+)
 from .profile import Profile
 from .status import Status
 from .system import System
@@ -23,6 +28,7 @@ _LOGGER = getLogger(__name__)
 GRAPHQL_EXECUTE_TIMEOUT_SECONDS = 60
 
 _GRAPHQL_ERRORS = (GraphqlTransportError, TransportQueryError, GraphQLError)
+_CONNECTION_ERRORS = (GraphqlTransportError, ClientError, TimeoutError, OSError)
 
 
 class ApiConnectionGraphql:
@@ -69,30 +75,30 @@ class ApiConnectionGraphql:
         transport = AIOHTTPTransport(
             url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth", ssl=True
         )
-        async with Client(
-            transport=transport,
-            fetch_schema_from_transport=False,
-        ) as session:
-            query = gql(
-                """
-                mutation assistedLogin($input: AssistedLoginInput!) {
-                    assistedLogin(input: $input) {
-                        success
-                        status
-                        errorMessage
-                        data {
-                            token_type
-                            expires_in
-                            access_token
-                            scope
-                            refresh_token
+        try:
+            async with Client(
+                transport=transport,
+                fetch_schema_from_transport=False,
+            ) as session:
+                query = gql(
+                    """
+                    mutation assistedLogin($input: AssistedLoginInput!) {
+                        assistedLogin(input: $input) {
+                            success
+                            status
+                            errorMessage
+                            data {
+                                token_type
+                                expires_in
+                                access_token
+                                scope
+                                refresh_token
+                            }
                         }
                     }
-                }
-            """
-            )
+                """
+                )
 
-            try:
                 result = await session.execute(
                     query,
                     variable_values={
@@ -100,20 +106,24 @@ class ApiConnectionGraphql:
                     },
                     operation_name="assistedLogin",
                 )
-            except _GRAPHQL_ERRORS as error:
-                raise CarrierApiAuthError("Carrier authentication request failed") from error
-            success = result["assistedLogin"]["success"]
-            if success:
-                self.expires_at = datetime.now(UTC) + timedelta(
-                    seconds=result["assistedLogin"]["data"]["expires_in"]
-                )
-                self.token_type = result["assistedLogin"]["data"]["token_type"]
-                self.access_token = result["assistedLogin"]["data"]["access_token"]
-                self.refresh_token = result["assistedLogin"]["data"]["refresh_token"]
-                if self.api_websocket is None:
-                    self.api_websocket = ApiWebsocket(self)
-            else:
-                raise CarrierApiAuthError("Carrier authentication failed", payload=result)
+                success = result["assistedLogin"]["success"]
+                if success:
+                    self.expires_at = datetime.now(UTC) + timedelta(
+                        seconds=result["assistedLogin"]["data"]["expires_in"]
+                    )
+                    self.token_type = result["assistedLogin"]["data"]["token_type"]
+                    self.access_token = result["assistedLogin"]["data"]["access_token"]
+                    self.refresh_token = result["assistedLogin"]["data"]["refresh_token"]
+                    if self.api_websocket is None:
+                        self.api_websocket = ApiWebsocket(self)
+                else:
+                    raise CarrierApiAuthError("Carrier authentication failed", payload=result)
+        except TransportQueryError as error:
+            raise CarrierApiGraphqlError("Carrier authentication GraphQL request failed") from error
+        except _CONNECTION_ERRORS as error:
+            raise CarrierApiConnectionError("Carrier authentication connection failed") from error
+        except GraphQLError as error:
+            raise CarrierApiGraphqlError("Carrier authentication GraphQL request failed") from error
 
     async def check_auth_expiration(self) -> None:
         """Ensure the connection has a valid access token before API use."""
@@ -139,7 +149,11 @@ class ApiConnectionGraphql:
             response = await self.api_session.post(url=url, data=json_body)
             response.raise_for_status()
             data = await response.json()
-        except (ClientError, TimeoutError) as error:
+        except ClientResponseError as error:
+            if error.status in {401, 403}:
+                raise CarrierApiAuthError("Carrier token refresh was rejected") from error
+            raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
+        except (ClientError, TimeoutError, OSError) as error:
             raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
         self.expires_at = datetime.now(UTC) + timedelta(seconds=data["expires_in"])
         self.token_type = data["token_type"]
@@ -165,19 +179,27 @@ class ApiConnectionGraphql:
             headers={"Authorization": f"{self.token_type} {self.access_token}"},
             ssl=True,
         )
-        async with Client(
-            transport=transport,
-            fetch_schema_from_transport=False,
-            execute_timeout=GRAPHQL_EXECUTE_TIMEOUT_SECONDS,
-        ) as session:
-            try:
+        try:
+            async with Client(
+                transport=transport,
+                fetch_schema_from_transport=False,
+                execute_timeout=GRAPHQL_EXECUTE_TIMEOUT_SECONDS,
+            ) as session:
                 return await session.execute(
                     query, variable_values=variable_values, operation_name=operation_name
                 )
-            except _GRAPHQL_ERRORS as error:
-                raise CarrierApiGraphqlError(
-                    f"Carrier GraphQL operation failed: {operation_name}"
-                ) from error
+        except TransportQueryError as error:
+            raise CarrierApiGraphqlError(
+                f"Carrier GraphQL operation failed: {operation_name}"
+            ) from error
+        except _CONNECTION_ERRORS as error:
+            raise CarrierApiConnectionError(
+                f"Carrier connection failed during GraphQL operation: {operation_name}"
+            ) from error
+        except GraphQLError as error:
+            raise CarrierApiGraphqlError(
+                f"Carrier GraphQL operation failed: {operation_name}"
+            ) from error
 
     async def get_user_info(self) -> dict[str, Any]:
         """Fetch Carrier account profile, location, and device metadata.

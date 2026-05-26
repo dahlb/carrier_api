@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from aiohttp import ClientError
+
 
 class CarrierApiError(Exception):
     """Base exception for Carrier API failures."""
@@ -21,12 +23,20 @@ class CarrierApiAuthError(CarrierApiError):
     """Raised when Carrier authentication fails or returns an unsuccessful result."""
 
 
+class CarrierApiConnectionError(CarrierApiError, ClientError):
+    """Raised when Carrier API communication fails before a valid API response."""
+
+
 class CarrierApiGraphqlError(CarrierApiError):
     """Raised when an authenticated Carrier GraphQL operation fails."""
 
 
-class CarrierApiTokenRefreshError(CarrierApiAuthError):
+class CarrierApiTokenRefreshError(CarrierApiConnectionError):
     """Raised when Carrier access token refresh fails."""
+
+
+class CarrierApiWebsocketError(CarrierApiConnectionError):
+    """Raised when Carrier realtime websocket communication fails."""
 
 
 # Deprecated compatibility aliases. These will be removed in a future release.
