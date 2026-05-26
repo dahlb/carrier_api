@@ -345,9 +345,10 @@ def find_first_value(credentials: Mapping[str, Any], keys: tuple[str, ...]) -> s
         value = credentials.get(key)
         if value is None:
             continue
-        value_text = str(value)
-        if value_text:
-            return value_text
+        if not isinstance(value, str):
+            raise TypeError("Credential values must be strings")
+        if value:
+            return value
     return None
 
 
@@ -532,16 +533,11 @@ async def send_sample_manual_activity_update(
     Raises:
         RuntimeError: If no system or zone is available to update.
     """
-    if not systems:
-        raise RuntimeError("No systems available")
-    zones = systems[0].config.zones
-    if not zones:
-        raise RuntimeError("No config zones available")
-
+    system, zone = find_first_system_zone(systems)
     try:
         await api_connection.set_config_manual_activity(
-            system_serial=systems[0].profile.serial,
-            zone_id=zones[0].api_id,
+            system_serial=system.profile.serial,
+            zone_id=zone.api_id,
             heat_set_point="73",
             cool_set_point="80",
             fan_mode=FanModes.LOW,
@@ -552,6 +548,26 @@ async def send_sample_manual_activity_update(
         print(f"Manual activity update failed: {err}")
         return False
     return True
+
+
+def find_first_system_zone(systems: list[Any]) -> tuple[Any, Any]:
+    """Find the first system and zone available for smoke-test validation.
+
+    Args:
+        systems: Loaded Carrier system objects.
+
+    Returns:
+        First system and first configured zone.
+
+    Raises:
+        RuntimeError: If no system or zone is available.
+    """
+    if not systems:
+        raise RuntimeError("No systems available")
+    zones = systems[0].config.zones
+    if not zones:
+        raise RuntimeError("No config zones available")
+    return systems[0], zones[0]
 
 
 async def maybe_send_sample_manual_activity_update(
@@ -571,6 +587,7 @@ async def maybe_send_sample_manual_activity_update(
         True when the mutation is sent successfully, otherwise False.
     """
     if read_only:
+        find_first_system_zone(systems)
         print("Read-only mode enabled; skipping sample manual activity update.")
         return False
     return await send_sample_manual_activity_update(api_connection, systems)

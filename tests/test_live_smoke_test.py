@@ -110,6 +110,26 @@ def test_load_credentials_rejects_json_null_values(tmp_path: Path) -> None:
         load_credentials(SmokeTestOptions(credentials_file=credentials_file))
 
 
+@pytest.mark.parametrize(
+    ("filename", "contents"),
+    [
+        ("carrier.json", '{"username": 123, "password": "password"}'),
+        ("carrier.toml", 'username = "user@example.com"\npassword = false\n'),
+    ],
+)
+def test_load_credentials_rejects_typed_config_values(
+    tmp_path: Path,
+    filename: str,
+    contents: str,
+) -> None:
+    """JSON and TOML credentials must use strings for credential values."""
+    credentials_file = tmp_path / filename
+    credentials_file.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(TypeError, match="must be strings"):
+        load_credentials(SmokeTestOptions(credentials_file=credentials_file))
+
+
 def test_load_credentials_uses_environment_when_file_is_not_provided(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -333,12 +353,53 @@ async def test_maybe_send_sample_manual_activity_update_skips_read_only(
 
     sent = await maybe_send_sample_manual_activity_update(
         cast("ApiConnectionGraphql", FailingConnection()),
-        [],
+        [
+            SimpleNamespace(
+                config=SimpleNamespace(zones=[SimpleNamespace(api_id="zone-1")]),
+                profile=SimpleNamespace(serial="serial-1"),
+            )
+        ],
         read_only=True,
     )
 
     assert sent is False
     assert "Read-only mode enabled" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("systems", "message"),
+    [
+        ([], "No systems available"),
+        (
+            [SimpleNamespace(config=SimpleNamespace(zones=[]))],
+            "No config zones available",
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_maybe_send_sample_manual_activity_update_validates_read_only_systems(
+    systems: list[Any],
+    message: str,
+) -> None:
+    """Read-only mode still fails when live API data has no usable system zone."""
+
+    class FailingConnection:
+        """Connection double that must not be called before validation fails."""
+
+        async def set_config_manual_activity(self, **kwargs: Any) -> None:
+            """Fail if the mutation is attempted.
+
+            Args:
+                kwargs: Captured mutation arguments.
+            """
+            raise AssertionError("mutation should not be called")
+
+    with pytest.raises(RuntimeError, match=message):
+        await maybe_send_sample_manual_activity_update(
+            cast("ApiConnectionGraphql", FailingConnection()),
+            systems,
+            read_only=True,
+        )
 
 
 def test_write_schema_output_writes_pretty_json(tmp_path: Path) -> None:
