@@ -203,18 +203,13 @@ Add or update deterministic pytest coverage for behavior changes. Fixture data f
 
 ## Updating the Captured Schema
 
-To refresh `schema.graphql`, temporarily add this diagnostic block inside `ApiConnectionGraphql.authed_query()` after the GraphQL session is created:
+To refresh captured GraphQL schema data, run the live smoke test with `--schema-output-file`:
 
-```python
-introspection_query = get_introspection_query(**session.client.introspection_args)
-execution_result = await transport.execute(parse(introspection_query))
-schema = dumps(execution_result.data, indent=2)
-_LOGGER.debug(schema)
-with open("schema.graphql", "w") as f:
-    f.write(schema)
+```bash
+scripts/live_smoke_test --credentials-file scripts/carrier_api.env --schema-output-file /private/tmp/carrier_api_schema.json --read-only
 ```
 
-Keep one-off schema capture edits out of final commits unless the capture logic itself is being changed.
+The command authenticates with Carrier, runs the GraphQL introspection query, and writes the schema JSON to the path you provide. Add `--output-file /private/tmp/carrier_api.txt` when you also want the full live smoke-test transcript.
 
 ## Contributing
 
