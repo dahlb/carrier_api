@@ -103,8 +103,9 @@ class System:
             "name": self.profile.name,
             "profile": self.profile.as_dict(),
             "status": self.status.as_dict(),
-            "config": self.config.as_dict(),
+            "config": self.config.as_dict(self.status.zones),
             "energy": self.energy.as_dict(),
+            "supported_hvac_capabilities": self.supported_hvac_capabilities(),
         }
 
     def __repr__(self) -> str:

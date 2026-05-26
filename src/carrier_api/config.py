@@ -204,18 +204,29 @@ class ConfigZone:
             return tomorrow_active_schedule_periods[0]["time"]
         return None
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self, status_zone: StatusZone | None = None) -> dict[str, Any]:
         """Return a dictionary representation of the zone configuration.
+
+        Args:
+            status_zone: Optional runtime status for this zone. When provided,
+                the dictionary includes the activity profile Carrier reports as
+                currently active.
 
         Returns:
             A dictionary containing hold state, occupancy configuration, current
             activity, and configured activities.
         """
         current_activity = self.current_activity()
+        current_status_activity = (
+            self.current_status_activity(status_zone) if status_zone is not None else None
+        )
         builder = {
             "api_id": self.api_id,
             "name": self.name,
             "current_activity": current_activity.as_dict() if current_activity else None,
+            "current_status_activity": current_status_activity.as_dict()
+            if current_status_activity
+            else None,
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,
@@ -289,17 +300,24 @@ class Config:
             if safely_get_json_value(zone_json, "enabled") == "on":
                 self.zones.append(ConfigZone(zone_json=zone_json, vacation_json=vacation_json))
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self, status_zones: list[StatusZone] | None = None) -> dict[str, Any]:
         """Return a dictionary representation of the system configuration.
+
+        Args:
+            status_zones: Optional runtime status zones used to include
+                status-resolved current activity profiles in zone dictionaries.
 
         Returns:
             A dictionary containing high-level settings and enabled zones.
         """
+        status_zones_by_id = {status_zone.api_id: status_zone for status_zone in status_zones or []}
         return {
             "temperature_unit": self.temperature_unit,
             "mode": self.mode,
             "heat_source": self.heat_source,
-            "zones": [zone.as_dict() for zone in self.zones or []],
+            "zones": [
+                zone.as_dict(status_zones_by_id.get(zone.api_id)) for zone in self.zones or []
+            ],
         }
 
     def __repr__(self) -> str:

@@ -137,6 +137,7 @@ def test_config_schedule_branches_and_serialization(system_response: dict[str, A
     assert zone.next_activity_time() is not None
     assert config.humidifier_heat_target == 35
     assert config.as_dict()["zones"][0]["activities"][-1]["type"] == "vacation"
+    assert config.as_dict()["zones"][0]["current_status_activity"] is None
     assert repr(config) == str(config.as_dict())
     assert str(zone) == str(zone.as_dict())
 
@@ -160,6 +161,7 @@ def test_config_zone_current_activity_from_status_uses_api_reported_profile(
     assert current_activity is not None
     assert current_activity.type == ActivityTypes.WAKE
     assert current_activity is zone.find_activity(ActivityTypes.WAKE)
+    assert zone.as_dict(status_zone)["current_status_activity"] == current_activity.as_dict()
 
 
 def test_config_zone_current_activity_from_status_prefers_hold_activity(
@@ -263,8 +265,9 @@ def test_system_as_dict_uses_nested_model_dictionaries(
 
     assert system.as_dict()["profile"] == system.profile.as_dict()
     assert system.as_dict()["status"] == system.status.as_dict()
-    assert system.as_dict()["config"] == system.config.as_dict()
+    assert system.as_dict()["config"] == system.config.as_dict(system.status.zones)
     assert system.as_dict()["energy"] == system.energy.as_dict()
+    assert system.as_dict()["config"]["zones"][0]["current_status_activity"]["type"] == "wake"
     assert repr(system) == str(system.as_dict())
 
 
@@ -282,6 +285,11 @@ def test_system_reports_supported_hvac_capabilities(
     assert system.supports_cool()
     assert not system.supports_fan()
     assert system.supported_hvac_capabilities() == {
+        "heat": True,
+        "cool": True,
+        "fan": False,
+    }
+    assert system.as_dict()["supported_hvac_capabilities"] == {
         "heat": True,
         "cool": True,
         "fan": False,
