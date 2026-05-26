@@ -7,18 +7,22 @@ from typing import Any, Literal
 from aiohttp import ClientSession
 from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
+from gql.transport.exceptions import TransportError as GraphqlTransportError
+from graphql import GraphQLError
 
 from .api_websocket import ApiWebsocket
 from .config import Config
 from .const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from .energy import Energy
-from .errors import AuthError
+from .errors import AuthError, BaseError
 from .profile import Profile
 from .status import Status
 from .system import System
 
 _LOGGER = getLogger(__name__)
 GRAPHQL_EXECUTE_TIMEOUT_SECONDS = 60
+
+_GRAPHQL_ERRORS = (GraphqlTransportError, GraphQLError)
 
 
 class ApiConnectionGraphql:
@@ -88,11 +92,16 @@ class ApiConnectionGraphql:
             """
             )
 
-            result = await session.execute(
-                query,
-                variable_values={"input": {"password": self.password, "username": self.username}},
-                operation_name="assistedLogin",
-            )
+            try:
+                result = await session.execute(
+                    query,
+                    variable_values={
+                        "input": {"password": self.password, "username": self.username}
+                    },
+                    operation_name="assistedLogin",
+                )
+            except _GRAPHQL_ERRORS as error:
+                raise AuthError("Carrier authentication request failed") from error
             success = result["assistedLogin"]["success"]
             if success:
                 self.expires_at = datetime.now(UTC) + timedelta(
@@ -104,7 +113,7 @@ class ApiConnectionGraphql:
                 if self.api_websocket is None:
                     self.api_websocket = ApiWebsocket(self)
             else:
-                raise AuthError(result)
+                raise AuthError("Carrier authentication failed", payload=result)
 
     async def check_auth_expiration(self) -> None:
         """Ensure the connection has a valid access token before API use."""
@@ -158,9 +167,12 @@ class ApiConnectionGraphql:
             fetch_schema_from_transport=False,
             execute_timeout=GRAPHQL_EXECUTE_TIMEOUT_SECONDS,
         ) as session:
-            return await session.execute(
-                query, variable_values=variable_values, operation_name=operation_name
-            )
+            try:
+                return await session.execute(
+                    query, variable_values=variable_values, operation_name=operation_name
+                )
+            except _GRAPHQL_ERRORS as error:
+                raise BaseError(f"Carrier GraphQL operation failed: {operation_name}") from error
 
     async def get_user_info(self) -> dict[str, Any]:
         """Fetch Carrier account profile, location, and device metadata.

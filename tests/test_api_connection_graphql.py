@@ -5,8 +5,10 @@ from typing import Any, Self, cast
 
 from aiohttp import ClientSession
 from gql import GraphQLRequest, gql
+from gql.transport.exceptions import TransportQueryError
 import pytest
 
+from carrier_api import errors
 from carrier_api.api_connection_graphql import ApiConnectionGraphql
 from carrier_api.const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from carrier_api.system import System
@@ -305,6 +307,103 @@ async def test_check_auth_expiration_logs_in_then_refreshes_when_expired(
 
     assert connection.login_count == 1
     assert connection.refresh_count == 1
+
+
+@pytest.mark.asyncio
+async def test_login_wraps_graphql_transport_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Raise Carrier auth errors instead of raw GraphQL transport exceptions.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+    """
+    transport_error = TransportQueryError("invalid credentials")
+
+    class FailingClient:
+        """GraphQL client double that raises during login execution."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            """Accept GraphQL client construction arguments."""
+
+        async def __aenter__(self) -> Self:
+            """Return the fake session.
+
+            Returns:
+                The fake GraphQL session.
+            """
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            """Exit the fake session context."""
+
+        async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            """Raise the configured transport error."""
+            raise transport_error
+
+    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", FailingClient)
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+
+    with pytest.raises(errors.AuthError) as error:
+        await connection.login()
+
+    assert error.value.__cause__ is transport_error
+    assert isinstance(error.value, errors.BaseError)
+
+
+@pytest.mark.asyncio
+async def test_authed_query_wraps_graphql_transport_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Raise Carrier API errors instead of raw GraphQL transport exceptions.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+    """
+    transport_error = TransportQueryError("query failed")
+
+    class FailingClient:
+        """GraphQL client double that raises during authenticated execution."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            """Accept GraphQL client construction arguments."""
+
+        async def __aenter__(self) -> Self:
+            """Return the fake session.
+
+            Returns:
+                The fake GraphQL session.
+            """
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            """Exit the fake session context."""
+
+        async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            """Raise the configured transport error."""
+            raise transport_error
+
+    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", FailingClient)
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    connection.refresh_token = "refresh"
+    connection.token_type = "Bearer"
+    connection.access_token = "access"
+    connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+    with pytest.raises(errors.BaseError) as error:
+        await connection.authed_query(
+            operation_name="getUser",
+            query=cast("GraphQLRequest", object()),
+            variable_values={},
+        )
+
+    assert error.value.__cause__ is transport_error
 
 
 @pytest.mark.asyncio

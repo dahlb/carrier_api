@@ -1,11 +1,21 @@
 """Carrier API exception types."""
 
-from graphql import GraphQLError
+from typing import Any
 
 
-class BaseError(GraphQLError):
-    """Base GraphQL-compatible exception for Carrier API failures."""
+class BaseError(Exception):
+    """Base exception for Carrier API failures."""
+
+    def __init__(self, message: object, payload: Any | None = None) -> None:
+        """Initialize a Carrier API exception.
+
+        Args:
+            message: Human-readable error message or raw Carrier error payload.
+            payload: Optional structured error payload from Carrier.
+        """
+        super().__init__(message)
+        self.payload = payload
 
 
-class AuthError(GraphQLError):
+class AuthError(BaseError):
     """Raised when Carrier authentication fails or returns an unsuccessful result."""
