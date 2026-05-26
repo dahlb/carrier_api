@@ -347,6 +347,7 @@ def test_system_hvac_capabilities_ignore_ambiguous_profile_strings(
     raw_system["profile"]["idutype"] = "package"
     raw_system["profile"]["idusource"] = "none"
     raw_system["profile"]["odutype"] = "package"
+    raw_system["config"]["cfgfan"] = "off"
     raw_system["config"]["zones"] = []
     raw_energy = deepcopy(energy_response["infinityEnergy"])
     for energy_config in raw_energy["energyConfig"].values():
@@ -367,16 +368,33 @@ def test_system_hvac_capabilities_ignore_ambiguous_profile_strings(
     }
 
 
-def test_system_hvac_capabilities_use_activity_fan_controls_when_cfgfan_is_off(
+def test_system_hvac_capabilities_do_not_let_activity_fan_override_cfgfan_off(
     systems: list[System],
 ) -> None:
-    """Treat configured activity fan modes as stronger fan support evidence.
+    """Treat cfgfan as authoritative when Carrier provides that flag.
 
     Args:
         systems: Prepared system fixture models.
     """
     system = systems[0]
     system.config.fan_enabled = False
+    system.energy.fan = False
+    system.energy.fan_gas = False
+
+    assert not system.supports_fan()
+    assert not system.supported_hvac_capabilities()["fan"]
+
+
+def test_system_hvac_capabilities_fall_back_to_activity_fan_controls(
+    systems: list[System],
+) -> None:
+    """Use configured activity fan modes when cfgfan is absent.
+
+    Args:
+        systems: Prepared system fixture models.
+    """
+    system = systems[0]
+    system.config.fan_enabled = None
     system.energy.fan = False
     system.energy.fan_gas = False
 

@@ -4,6 +4,7 @@ from logging import getLogger
 from typing import Any
 
 from .config import Config
+from .const import FanModes
 from .energy import Energy
 from .profile import Profile
 from .status import Status
@@ -78,13 +79,16 @@ class System:
         """Return whether available Carrier data suggests fan support.
 
         Carrier does not expose a typed fan capability enum here. This helper
-        uses configured zone activity fan controls first. Energy reporting
-        flags are only a fallback when no activity fan data is available.
+        treats the config fan flag as authoritative when Carrier provides it.
+        Activity fan modes and energy reporting flags are only fallbacks when
+        that flag is omitted.
 
         Returns:
             ``True`` when configuration or energy data suggests fan control is
             available.
         """
+        if self.config.fan_enabled is not None:
+            return self.config.fan_enabled
         if self._config_supports_fan_control():
             return True
         return self._supports_any_energy_capability(FAN_CAPABILITY_FIELDS)
@@ -122,10 +126,10 @@ class System:
         """Return whether zone activities expose fan control values.
 
         Returns:
-            ``True`` when any configured activity has a parsed fan mode.
+            ``True`` when any configured activity has a parsed non-off fan mode.
         """
         return any(
-            activity.fan is not None
+            activity.fan is not None and activity.fan is not FanModes.OFF
             for zone in self.config.zones or []
             for activity in zone.activities or []
         )
