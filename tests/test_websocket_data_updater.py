@@ -256,15 +256,15 @@ async def test_status_zone_activity_message_handler(
         carrier_system: Prepared system model that receives the update.
         websocket_message_str: Raw zone activity websocket message fixture.
     """
-    assert carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
+    assert carrier_system.status.zones[0].current_status_activity == ActivityTypes.WAKE
     assert carrier_system.status.zones[0].heat_set_point == 74
     assert carrier_system.status.zones[0].cool_set_point == 78
     await data_updater.message_handler(websocket_message_str)
-    assert carrier_system.status.zones[0].current_activity == ActivityTypes.HOME
+    assert carrier_system.status.zones[0].current_status_activity == ActivityTypes.HOME
     assert carrier_system.status.zones[0].heat_set_point == 77
     assert carrier_system.status.zones[0].cool_set_point == 79
     reprocessed_status = Status(raw=carrier_system.status.raw)
-    assert reprocessed_status.zones[0].current_activity == ActivityTypes.HOME
+    assert reprocessed_status.zones[0].current_status_activity == ActivityTypes.HOME
     assert reprocessed_status.zones[0].heat_set_point == 77
     assert reprocessed_status.zones[0].cool_set_point == 79
 
@@ -285,13 +285,13 @@ async def test_status_zone_activity_only_message_handler(
         carrier_system: Prepared system model that receives the update.
         websocket_message_str: Raw activity-only websocket message fixture.
     """
-    assert carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
+    assert carrier_system.status.zones[0].current_status_activity == ActivityTypes.WAKE
     assert carrier_system.status.zones[0].fan == FanModes.MED
     await data_updater.message_handler(websocket_message_str)
-    assert carrier_system.status.zones[0].current_activity == ActivityTypes.SLEEP
+    assert carrier_system.status.zones[0].current_status_activity == ActivityTypes.SLEEP
     assert carrier_system.status.zones[0].fan == FanModes.MED
     reprocessed_status = Status(raw=carrier_system.status.raw)
-    assert reprocessed_status.zones[0].current_activity == ActivityTypes.SLEEP
+    assert reprocessed_status.zones[0].current_status_activity == ActivityTypes.SLEEP
     assert carrier_system.status.zones[0].fan == FanModes.MED
 
 
@@ -309,11 +309,11 @@ async def test_status_zone_hold_message_handler(
         carrier_system: Prepared system model that receives the update.
         websocket_message_str: Raw zone hold websocket message fixture.
     """
-    assert carrier_system.status.zones[0].current_activity == ActivityTypes.WAKE
+    assert carrier_system.status.zones[0].current_status_activity == ActivityTypes.WAKE
     await data_updater.message_handler(websocket_message_str)
-    assert carrier_system.status.zones[0].current_activity == ActivityTypes.MANUAL
+    assert carrier_system.status.zones[0].current_status_activity == ActivityTypes.MANUAL
     reprocessed_status = Status(raw=carrier_system.status.raw)
-    assert reprocessed_status.zones[0].current_activity == ActivityTypes.MANUAL
+    assert reprocessed_status.zones[0].current_status_activity == ActivityTypes.MANUAL
 
 
 @pytest.mark.asyncio

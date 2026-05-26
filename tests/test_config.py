@@ -3,8 +3,8 @@
 from carrier_api.config import ConfigZone
 
 
-def test_current_activity_returns_none_when_no_periods_are_active() -> None:
-    """Return no current activity when today and yesterday have no active periods."""
+def test_current_scheduled_activity_returns_none_when_no_periods_are_active() -> None:
+    """Return no scheduled activity when today and yesterday have no active periods."""
     zone = ConfigZone(
         zone_json={
             "id": "1",
@@ -45,4 +45,4 @@ def test_current_activity_returns_none_when_no_periods_are_active() -> None:
         },
     )
 
-    assert zone.current_activity() is None
+    assert zone.current_scheduled_activity() is None

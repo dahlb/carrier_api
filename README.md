@@ -94,7 +94,7 @@ Model objects provide `as_dict()` for structured serialization. Their string and
 
 For zone-level profile resolution, call `ConfigZone.current_status_activity(status_zone)` with the matching `StatusZone`. This uses Carrier's reported current activity when the zone is not held, and the configured hold activity when a hold is active.
 
-`System.as_dict()` includes `supported_hvac_capabilities` and passes status-zone context into config serialization so each zone dictionary includes `current_status_activity`.
+`System.as_dict()` includes `supported_hvac_capabilities` and passes status-zone context into config serialization so each zone dictionary includes `current_activity.from_schedule` and `current_activity.from_status`.
 
 ## Updating Thermostat Settings
 

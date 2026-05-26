@@ -140,17 +140,23 @@ class ConfigZone:
         today_schedule_json = self.program_json["day"][sunday_0_index_today]
         return active_schedule_periods(today_schedule_json["period"])
 
-    def current_activity(self) -> ConfigZoneActivity | None:
-        """Determine the zone activity that should currently be active.
+    def current_scheduled_activity(self) -> ConfigZoneActivity | None:
+        """Determine the zone activity implied by local schedule configuration.
 
-        Held zones resolve directly to their hold activity. Scheduled zones use
-        the latest enabled period earlier than the current local time, falling
-        back to yesterday's final enabled period when today's schedule has not
-        started yet.
+        This is schedule/configuration-derived. Held zones resolve directly to
+        their configured hold activity. Non-held zones use the latest enabled
+        schedule period earlier than the current local time, falling back to
+        yesterday's final enabled period when today's schedule has not started
+        yet.
+
+        Use ``current_status_activity`` when resolving Carrier's live
+        ``StatusZone.current_status_activity`` report instead of the local
+        schedule calculation.
 
         Returns:
-            The configured current activity, or ``None`` when no active period is
-            available in today or yesterday's schedule.
+            The activity profile implied by schedule/configuration data, or
+            ``None`` when no active period is available in today or yesterday's
+            schedule.
         """
         if self.hold:
             return self.find_activity(self.hold_activity)
@@ -170,18 +176,23 @@ class ConfigZone:
         )
 
     def current_status_activity(self, status_zone: StatusZone) -> ConfigZoneActivity | None:
-        """Return the activity profile currently reported for a status zone.
+        """Return the activity profile matching Carrier's live status report.
+
+        This is status-derived. For non-held zones, it resolves the
+        ``StatusZone.current_status_activity`` value Carrier reported for the
+        matching zone. For held zones, it resolves the configured hold activity
+        so local hold state remains authoritative for the selected profile.
 
         Args:
-            status_zone: Runtime zone status containing Carrier's current
-                activity value.
+            status_zone: Runtime zone status containing Carrier's reported
+                current activity value.
 
         Returns:
-            The configured activity matching the current runtime status, or
-            ``None`` when Carrier reports an activity missing from this zone's
+            The configured activity matching the status/hold activity, or
+            ``None`` when that activity is missing from this zone's
             configuration.
         """
-        activity_type = self.hold_activity if self.hold else status_zone.current_activity
+        activity_type = self.hold_activity if self.hold else status_zone.current_status_activity
         return self.find_activity(activity_type)
 
     def next_activity_time(self) -> str | None:
@@ -209,24 +220,29 @@ class ConfigZone:
 
         Args:
             status_zone: Optional runtime status for this zone. When provided,
-                the dictionary includes the activity profile Carrier reports as
-                currently active.
+                ``current_activity.from_status`` resolves Carrier's live status
+                activity; when omitted, that field is ``None``.
 
         Returns:
-            A dictionary containing hold state, occupancy configuration, current
-            activity, and configured activities.
+            A dictionary containing hold state, occupancy configuration,
+            configured activities, and ``current_activity`` split into
+            ``from_schedule`` and ``from_status`` sources.
         """
-        current_activity = self.current_activity()
+        current_scheduled_activity = self.current_scheduled_activity()
         current_status_activity = (
             self.current_status_activity(status_zone) if status_zone is not None else None
         )
         builder = {
             "api_id": self.api_id,
             "name": self.name,
-            "current_activity": current_activity.as_dict() if current_activity else None,
-            "current_status_activity": current_status_activity.as_dict()
-            if current_status_activity
-            else None,
+            "current_activity": {
+                "from_schedule": current_scheduled_activity.as_dict()
+                if current_scheduled_activity
+                else None,
+                "from_status": current_status_activity.as_dict()
+                if current_status_activity
+                else None,
+            },
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,

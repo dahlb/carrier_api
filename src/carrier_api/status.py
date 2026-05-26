@@ -13,7 +13,7 @@ _LOGGER = getLogger(__name__)
 
 
 class StatusZone:
-    """Runtime status for a single Carrier zone."""
+    """Runtime status reported by Carrier for a single zone."""
 
     def __init__(self, status_zone_json: dict[str, Any]) -> None:
         """Build zone status from a Carrier status zone payload.
@@ -23,7 +23,9 @@ class StatusZone:
         """
         self.api_id = safely_get_json_value(status_zone_json, "id", str)
         self.name: str = safely_get_json_value(status_zone_json, "name")
-        self.current_activity: ActivityTypes = ActivityTypes(status_zone_json["currentActivity"])
+        self.current_status_activity: ActivityTypes = ActivityTypes(
+            status_zone_json["currentActivity"]
+        )
         self.temperature: float = safely_get_json_value(status_zone_json, "rt", float)
         self.humidity: int = safely_get_json_value(status_zone_json, "rh", int)
         self.occupancy: bool = safely_get_json_value(status_zone_json, "occupancy") == "occupied"
@@ -63,7 +65,7 @@ class StatusZone:
         return {
             "id": self.api_id,
             "name": self.name,
-            "current_activity": self.current_activity.value,
+            "current_status_activity": self.current_status_activity.value,
             "temperature": self.temperature,
             "humidity": self.humidity,
             "fan": self.fan.value,
