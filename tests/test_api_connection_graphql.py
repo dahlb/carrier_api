@@ -18,7 +18,7 @@ from carrier_api.system import System
 class FakeResponse:
     """Minimal aiohttp response double for token refresh tests."""
 
-    def __init__(self, payload: dict[str, Any]) -> None:
+    def __init__(self, payload: object) -> None:
         """Initialize the fake response with JSON payload data.
 
         Args:
@@ -31,7 +31,7 @@ class FakeResponse:
         """Record that response status validation was requested."""
         self.raise_for_status_called = True
 
-    async def json(self) -> dict[str, Any]:
+    async def json(self) -> object:
         """Return the configured JSON payload.
 
         Returns:
@@ -586,7 +586,7 @@ async def test_refresh_auth_token_normalizes_malformed_success_payloads(
         cause_type: Expected original exception type preserved as the cause.
     """
     session = FakeSession()
-    session.response = FakeResponse(cast("dict[str, Any]", payload))
+    session.response = FakeResponse(payload)
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
