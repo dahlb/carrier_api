@@ -157,7 +157,12 @@ class ApiConnectionGraphql:
                     if self.api_websocket is None:
                         self.api_websocket = ApiWebsocket(self)
                 else:
-                    raise CarrierApiAuthError(result, payload=result)
+                    error_message = result["assistedLogin"].get("errorMessage")
+                    if isinstance(error_message, str) and error_message:
+                        message = f"Carrier assistedLogin failed: {error_message}"
+                    else:
+                        message = "Carrier assistedLogin failed"
+                    raise CarrierApiAuthError(message, payload=result)
         except TransportQueryError as error:
             raise CarrierApiGraphqlError("Carrier authentication GraphQL request failed") from error
         except _CONNECTION_ERRORS as error:

@@ -352,10 +352,10 @@ def test_graphql_error_tuple_catches_transport_query_errors() -> None:
 
 
 @pytest.mark.asyncio
-async def test_login_failure_preserves_auth_payload_in_exception_args(
+async def test_login_failure_uses_readable_message_and_preserves_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Keep legacy auth failure payload access while exposing ``payload``.
+    """Expose a readable auth failure message while preserving payload access.
 
     Args:
         monkeypatch: Pytest helper for replacing the GraphQL client.
@@ -380,7 +380,7 @@ async def test_login_failure_preserves_auth_payload_in_exception_args(
     with pytest.raises(errors.CarrierApiAuthError) as error:
         await connection.login()
 
-    assert error.value.args[0] == payload
+    assert error.value.args[0] == "Carrier assistedLogin failed: invalid credentials"
     assert error.value.payload == payload
 
 
