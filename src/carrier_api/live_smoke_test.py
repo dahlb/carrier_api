@@ -595,10 +595,10 @@ async def main(options: SmokeTestOptions) -> None:
     print()
     try:
         api_connection = ApiConnectionGraphql(username=username, password=password)
-        systems = await api_connection.load_data()
         if options.schema_output_file is not None:
             await write_captured_schema(api_connection, options.schema_output_file)
             print(f"Wrote captured GraphQL schema to {options.schema_output_file}")
+        systems = await api_connection.load_data()
         print([system.as_dict() for system in systems])
 
         async def listener() -> None:

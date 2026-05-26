@@ -16,6 +16,7 @@ from carrier_api.live_smoke_test import (
     SmokeTestTranscript,
     TeeTextIO,
     load_credentials,
+    main,
     maybe_send_sample_manual_activity_update,
     parse_args,
     send_sample_manual_activity_update,
@@ -192,6 +193,114 @@ def test_parse_args_resolves_relative_paths_from_launcher_directory(
         output_file=tmp_path / "smoke.txt",
         schema_output_file=tmp_path / "schema.json",
     )
+
+
+@pytest.mark.asyncio
+async def test_main_writes_schema_before_loading_live_data(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Schema capture happens before the live data load and websocket wait."""
+    calls: list[str] = []
+
+    class FakeWebsocket:
+        """Minimal websocket double for the live smoke-test listener setup."""
+
+        websocket = None
+        task_listener = None
+        task_heartbeat = None
+        running = False
+
+        def callback_add(self, callback: object) -> None:
+            """Record callback registration.
+
+            Args:
+                callback: Callback registered by the smoke test.
+            """
+            calls.append("callback")
+
+        async def create_task_listener(self) -> None:
+            """Record listener startup."""
+            calls.append("listener")
+
+    class FakeConnection:
+        """Connection double that records live smoke-test operation order."""
+
+        def __init__(self, username: str, password: str) -> None:
+            """Initialize the fake connection.
+
+            Args:
+                username: Carrier account username.
+                password: Carrier account password.
+            """
+            self.username = username
+            self.password = password
+            self.api_websocket = FakeWebsocket()
+
+        async def load_data(self) -> list[Any]:
+            """Record live data loading.
+
+            Returns:
+                Minimal system data for listener setup.
+            """
+            calls.append("load")
+            return [
+                SimpleNamespace(
+                    as_dict=lambda: {"serial": "serial-1"},
+                    profile=SimpleNamespace(serial="serial-1"),
+                    config=SimpleNamespace(zones=[SimpleNamespace(api_id="zone-1")]),
+                )
+            ]
+
+        async def cleanup(self) -> None:
+            """Record cleanup."""
+            calls.append("cleanup")
+
+    async def fake_write_captured_schema(
+        api_connection: ApiConnectionGraphql,
+        schema_output_file: Path,
+    ) -> None:
+        """Record schema capture.
+
+        Args:
+            api_connection: API connection passed to schema capture.
+            schema_output_file: Schema output path.
+        """
+        calls.append("schema")
+
+    async def fake_sleep(seconds: float) -> None:
+        """Record the websocket observation wait.
+
+        Args:
+            seconds: Wait duration.
+        """
+        calls.append("sleep")
+
+    monkeypatch.setattr(
+        "carrier_api.live_smoke_test.ApiConnectionGraphql",
+        FakeConnection,
+    )
+    monkeypatch.setattr(
+        "carrier_api.live_smoke_test.write_captured_schema", fake_write_captured_schema
+    )
+    monkeypatch.setattr("carrier_api.live_smoke_test.sleep", fake_sleep)
+
+    credentials_file = tmp_path / "carrier.env"
+    credentials_file.write_text(
+        "CARRIER_USERNAME=test@example.com\nCARRIER_PASSWORD=password\n",
+        encoding="utf-8",
+    )
+
+    await main(
+        SmokeTestOptions(
+            credentials_file=credentials_file,
+            schema_output_file=tmp_path / "schema.json",
+            read_only=True,
+        ),
+    )
+
+    assert calls.index("schema") < calls.index("load")
+    assert calls.index("schema") < calls.index("sleep")
 
 
 @pytest.mark.asyncio
