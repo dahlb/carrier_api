@@ -249,6 +249,17 @@ def connection() -> SpyConnection:
     return SpyConnection()
 
 
+def test_public_error_exports_use_carrier_api_prefix() -> None:
+    """Expose Carrier-prefixed public API exception classes."""
+    assert errors.CarrierApiError.__name__ == "CarrierApiError"
+    assert errors.CarrierApiAuthError.__name__ == "CarrierApiAuthError"
+    assert errors.CarrierApiGraphqlError.__name__ == "CarrierApiGraphqlError"
+    assert errors.CarrierApiTokenRefreshError.__name__ == "CarrierApiTokenRefreshError"
+    assert issubclass(errors.CarrierApiAuthError, errors.CarrierApiError)
+    assert issubclass(errors.CarrierApiGraphqlError, errors.CarrierApiError)
+    assert issubclass(errors.CarrierApiTokenRefreshError, errors.CarrierApiError)
+
+
 @pytest.mark.asyncio
 async def test_cleanup_closes_provided_session() -> None:
     """Close the underlying HTTP session."""
@@ -289,6 +300,39 @@ async def test_refresh_auth_token_updates_token_state() -> None:
     assert connection.access_token == "new-access"
     assert connection.refresh_token == "new-refresh"
     assert connection.expires_at > datetime.now(UTC)
+
+
+@pytest.mark.asyncio
+async def test_refresh_auth_token_wraps_refresh_failures() -> None:
+    """Raise Carrier token refresh errors instead of raw HTTP exceptions."""
+    refresh_error = TimeoutError("token refresh timed out")
+
+    class FailingSession(FakeSession):
+        """Session double that fails token refresh requests."""
+
+        async def post(self, url: str, data: dict[str, Any]) -> FakeResponse:
+            """Raise the configured refresh error.
+
+            Args:
+                url: Requested URL.
+                data: Submitted form data.
+
+            Raises:
+                TimeoutError: Always raised for this failing session.
+            """
+            raise refresh_error
+
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FailingSession()),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
+        await connection.refresh_auth_token()
+
+    assert error.value.__cause__ is refresh_error
 
 
 @pytest.mark.asyncio
@@ -346,11 +390,11 @@ async def test_login_wraps_graphql_transport_errors(monkeypatch: pytest.MonkeyPa
         client_session=cast("ClientSession", FakeSession()),
     )
 
-    with pytest.raises(errors.AuthError) as error:
+    with pytest.raises(errors.CarrierApiAuthError) as error:
         await connection.login()
 
     assert error.value.__cause__ is transport_error
-    assert isinstance(error.value, errors.BaseError)
+    assert isinstance(error.value, errors.CarrierApiError)
 
 
 @pytest.mark.asyncio
@@ -396,7 +440,7 @@ async def test_authed_query_wraps_graphql_transport_errors(
     connection.access_token = "access"
     connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
 
-    with pytest.raises(errors.BaseError) as error:
+    with pytest.raises(errors.CarrierApiGraphqlError) as error:
         await connection.authed_query(
             operation_name="getUser",
             query=cast("GraphQLRequest", object()),

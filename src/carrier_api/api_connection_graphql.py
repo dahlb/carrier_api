@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from logging import getLogger
 from typing import Any, Literal
 
-from aiohttp import ClientSession
+from aiohttp import ClientError, ClientSession
 from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import TransportError as GraphqlTransportError
@@ -14,7 +14,7 @@ from .api_websocket import ApiWebsocket
 from .config import Config
 from .const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from .energy import Energy
-from .errors import AuthError, BaseError
+from .errors import CarrierApiAuthError, CarrierApiGraphqlError, CarrierApiTokenRefreshError
 from .profile import Profile
 from .status import Status
 from .system import System
@@ -63,7 +63,7 @@ class ApiConnectionGraphql:
         """Authenticate with Carrier and initialize websocket support.
 
         Raises:
-            AuthError: If the assisted login mutation reports an unsuccessful
+            CarrierApiAuthError: If the assisted login mutation reports an unsuccessful
                 authentication result.
         """
         transport = AIOHTTPTransport(
@@ -101,7 +101,7 @@ class ApiConnectionGraphql:
                     operation_name="assistedLogin",
                 )
             except _GRAPHQL_ERRORS as error:
-                raise AuthError("Carrier authentication request failed") from error
+                raise CarrierApiAuthError("Carrier authentication request failed") from error
             success = result["assistedLogin"]["success"]
             if success:
                 self.expires_at = datetime.now(UTC) + timedelta(
@@ -113,7 +113,7 @@ class ApiConnectionGraphql:
                 if self.api_websocket is None:
                     self.api_websocket = ApiWebsocket(self)
             else:
-                raise AuthError("Carrier authentication failed", payload=result)
+                raise CarrierApiAuthError("Carrier authentication failed", payload=result)
 
     async def check_auth_expiration(self) -> None:
         """Ensure the connection has a valid access token before API use."""
@@ -126,7 +126,7 @@ class ApiConnectionGraphql:
         """Refresh the OAuth access token using the stored refresh token.
 
         Raises:
-            aiohttp.ClientResponseError: If Carrier rejects the refresh request.
+            CarrierApiTokenRefreshError: If Carrier rejects the refresh request.
         """
         url = "https://sso.carrier.com/oauth2/default/v1/token"
         json_body = {
@@ -135,9 +135,12 @@ class ApiConnectionGraphql:
             "refresh_token": self.refresh_token,
             "scope": "offline_access",
         }
-        response = await self.api_session.post(url=url, data=json_body)
-        response.raise_for_status()
-        data = await response.json()
+        try:
+            response = await self.api_session.post(url=url, data=json_body)
+            response.raise_for_status()
+            data = await response.json()
+        except (ClientError, TimeoutError) as error:
+            raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
         self.expires_at = datetime.now(UTC) + timedelta(seconds=data["expires_in"])
         self.token_type = data["token_type"]
         self.access_token = data["access_token"]
@@ -172,7 +175,9 @@ class ApiConnectionGraphql:
                     query, variable_values=variable_values, operation_name=operation_name
                 )
             except _GRAPHQL_ERRORS as error:
-                raise BaseError(f"Carrier GraphQL operation failed: {operation_name}") from error
+                raise CarrierApiGraphqlError(
+                    f"Carrier GraphQL operation failed: {operation_name}"
+                ) from error
 
     async def get_user_info(self) -> dict[str, Any]:
         """Fetch Carrier account profile, location, and device metadata.

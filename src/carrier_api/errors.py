@@ -3,7 +3,7 @@
 from typing import Any
 
 
-class BaseError(Exception):
+class CarrierApiError(Exception):
     """Base exception for Carrier API failures."""
 
     def __init__(self, message: object, payload: Any | None = None) -> None:
@@ -17,5 +17,18 @@ class BaseError(Exception):
         self.payload = payload
 
 
-class AuthError(BaseError):
+class CarrierApiAuthError(CarrierApiError):
     """Raised when Carrier authentication fails or returns an unsuccessful result."""
+
+
+class CarrierApiGraphqlError(CarrierApiError):
+    """Raised when an authenticated Carrier GraphQL operation fails."""
+
+
+class CarrierApiTokenRefreshError(CarrierApiAuthError):
+    """Raised when Carrier access token refresh fails."""
+
+
+# Deprecated compatibility aliases. These will be removed in a future release.
+BaseError = CarrierApiError
+AuthError = CarrierApiAuthError
