@@ -51,6 +51,15 @@ class StatusZone:
         """
         return self.current_status_activity
 
+    @current_activity.setter
+    def current_activity(self, value: ActivityTypes) -> None:
+        """Set Carrier's live current activity through the compatibility alias.
+
+        Args:
+            value: Activity type to store as the status-derived current activity.
+        """
+        self.current_status_activity = value
+
     @property
     def zone_conditioning_const(self) -> SystemModes:
         """Map Carrier zone conditioning text to a system mode constant.
