@@ -89,11 +89,13 @@ def test_energy_period_helpers_return_sensor_measurements(
     energy = Energy(energy_response["infinityEnergy"])
 
     daily = energy.measurement_for_period(EnergyPeriod.DAY_1)
+    current_day = energy.current_day_measurements()
     monthly = energy.current_month_measurements()
     yearly = energy.current_year_measurements()
 
-    assert daily is energy.current_day_measurements()
     assert daily is not None
+    assert current_day is not None
+    assert daily.as_dict() == current_day.as_dict()
     assert monthly is not None
     assert yearly is not None
     assert daily.value_for_metric(EnergyUsageMetric.GAS) == 397
@@ -163,11 +165,12 @@ def test_status_modes_zone_conditioning_and_serialization(
         "operational_status": "off",
     }
     assert status.indoor_unit is not None
-    assert status.indoor_unit.as_dict() == {
+    indoor_unit_data = status.indoor_unit.as_dict()
+    assert indoor_unit_data == {
         "type": "furnace2stg",
         "operational_status": "low",
         "airflow_cfm": 1239,
-        "static_pressure": 1.399999976158142,
+        "static_pressure": pytest.approx(1.399999976158142),
         "blower_rpm": 1224,
     }
     assert repr(status.zones[0]) == str(status.zones[0].as_dict())
