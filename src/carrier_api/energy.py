@@ -1,12 +1,9 @@
 """Energy configuration and usage models for Carrier systems."""
 
 from enum import StrEnum
-from logging import getLogger
 from typing import Any
 
 from .util import safely_get_json_value
-
-_LOGGER = getLogger(__name__)
 
 
 class EnergyPeriod(StrEnum):
@@ -46,6 +43,21 @@ ENERGY_USAGE_METRICS: tuple[EnergyUsageMetric, ...] = (
 """Canonical order for Carrier energy usage metrics."""
 
 
+def _coerce_energy_usage_metric(metric: EnergyUsageMetric | str) -> EnergyUsageMetric | None:
+    """Return the normalized usage metric, if the input names one.
+
+    Args:
+        metric: Normalized metric enum or string.
+
+    Returns:
+        Matching usage metric, or ``None`` when the input is not supported.
+    """
+    try:
+        return EnergyUsageMetric(metric)
+    except ValueError:
+        return None
+
+
 class EnergyMeasurement:
     """Energy usage totals for a single Carrier reporting period."""
 
@@ -77,10 +89,10 @@ class EnergyMeasurement:
             The integer energy total for the metric, or ``None`` when the
             metric is not known.
         """
-        metric_name = metric.value if isinstance(metric, EnergyUsageMetric) else metric
-        if metric_name not in EnergyUsageMetric:
+        energy_metric = _coerce_energy_usage_metric(metric)
+        if energy_metric is None:
             return None
-        return getattr(self, metric_name)
+        return getattr(self, energy_metric.value)
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the usage measurement.
@@ -142,7 +154,7 @@ class Energy:
             raw: Raw ``infinityEnergy`` object returned by the Carrier GraphQL API.
         """
         self.raw = raw
-        self.seer: int = safely_get_json_value(self.raw, "energyConfig.seer", float)
+        self.seer: float = safely_get_json_value(self.raw, "energyConfig.seer", float)
         self.hspf: float = safely_get_json_value(self.raw, "energyConfig.hspf", float)
         self.cooling: bool = safely_get_json_value(
             self.raw, "energyConfig.cooling.display", bool
@@ -245,10 +257,10 @@ class Energy:
             ``True`` when Carrier reports the metric as both displayable and
             enabled, otherwise ``False``.
         """
-        metric_name = metric.value if isinstance(metric, EnergyUsageMetric) else metric
-        if metric_name not in EnergyUsageMetric:
+        energy_metric = _coerce_energy_usage_metric(metric)
+        if energy_metric is None:
             return False
-        return getattr(self, metric_name, False) is True
+        return getattr(self, energy_metric.value, False) is True
 
     def enabled_usage_metrics(self) -> tuple[EnergyUsageMetric, ...]:
         """Return energy usage metrics enabled for this system.

@@ -1,15 +1,12 @@
 """Current operational status models for Carrier systems and zones."""
 
 from datetime import datetime
-from logging import getLogger
 from typing import Any
 
 from dateutil.parser import isoparse
 
 from .const import ActivityTypes, FanModes, SystemModes, TemperatureUnits
 from .util import safely_get_json_value
-
-_LOGGER = getLogger(__name__)
 
 
 class StatusUnit:

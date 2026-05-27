@@ -31,7 +31,6 @@ from .system import System
 _LOGGER = getLogger(__name__)
 GRAPHQL_EXECUTE_TIMEOUT_SECONDS = 60
 
-_GRAPHQL_ERRORS = (GraphqlTransportError, TransportQueryError, GraphQLError)
 _CONNECTION_ERRORS = (GraphqlTransportError, ClientError, TimeoutError, OSError)
 _AUTH_HTTP_STATUSES = {401, 403}
 
