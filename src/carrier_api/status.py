@@ -12,6 +12,54 @@ from .util import safely_get_json_value
 _LOGGER = getLogger(__name__)
 
 
+class StatusUnit:
+    """Runtime status details for a Carrier indoor or outdoor unit."""
+
+    def __init__(self, status_unit_json: dict[str, Any]) -> None:
+        """Build unit status details from a Carrier unit status payload.
+
+        Args:
+            status_unit_json: Raw ``idu`` or ``odu`` object from the Carrier
+                status response.
+        """
+        self.type: str = safely_get_json_value(status_unit_json, "type")
+        self.operational_status: str = safely_get_json_value(status_unit_json, "opstat")
+        self.airflow_cfm: int = safely_get_json_value(status_unit_json, "cfm", int)
+        self.static_pressure: float = safely_get_json_value(status_unit_json, "statpress", float)
+        self.blower_rpm: int = safely_get_json_value(status_unit_json, "blwrpm", int)
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a dictionary representation of unit runtime details.
+
+        Returns:
+            A dictionary containing available unit status values.
+        """
+        values = {
+            "type": self.type,
+            "operational_status": self.operational_status,
+            "airflow_cfm": self.airflow_cfm,
+            "static_pressure": self.static_pressure,
+            "blower_rpm": self.blower_rpm,
+        }
+        return {key: value for key, value in values.items() if value is not None}
+
+    def __repr__(self) -> str:
+        """Return a developer-readable representation of the unit status.
+
+        Returns:
+            The unit status dictionary representation converted to a string.
+        """
+        return str(self.as_dict())
+
+    def __str__(self) -> str:
+        """Return a readable string representation of the unit status.
+
+        Returns:
+            The unit status representation converted to a string.
+        """
+        return str(self.as_dict())
+
+
 class StatusZone:
     """Runtime status reported by Carrier for a single zone."""
 
@@ -144,6 +192,8 @@ class Status:
     uv_lamp_level: int | None = None
     outdoor_unit_operational_status: str | None = None
     indoor_unit_operational_status: str | None = None
+    outdoor_unit: StatusUnit | None = None
+    indoor_unit: StatusUnit | None = None
     time_stamp: datetime | None = None
     zones: list[StatusZone]
 
@@ -166,6 +216,10 @@ class Status:
             self.humidifier_on: bool = safely_get_json_value(self.raw, "humid", str) == "on"
         self.uv_lamp_level: int = safely_get_json_value(self.raw, "uvlvl", int)
         self.is_disconnected: bool = safely_get_json_value(self.raw, "isDisconnected", bool)
+        if self.raw.get("odu") is not None:
+            self.outdoor_unit = StatusUnit(self.raw["odu"])
+        if self.raw.get("idu") is not None:
+            self.indoor_unit = StatusUnit(self.raw["idu"])
         self.airflow_cfm: int = safely_get_json_value(self.raw, "idu.cfm", int)
         self.blower_rpm: int = safely_get_json_value(self.raw, "idu.blwrpm", int)
         self.static_pressure: int = safely_get_json_value(self.raw, "idu.statpress", float)
@@ -217,6 +271,8 @@ class Status:
             "uv_lamp_level": self.uv_lamp_level,
             "outdoor_unit_operational_status": self.outdoor_unit_operational_status,
             "indoor_unit_operational_status": self.indoor_unit_operational_status,
+            "outdoor_unit": self.outdoor_unit.as_dict() if self.outdoor_unit is not None else None,
+            "indoor_unit": self.indoor_unit.as_dict() if self.indoor_unit is not None else None,
             "zones": [zone.as_dict() for zone in self.zones or []],
         }
 

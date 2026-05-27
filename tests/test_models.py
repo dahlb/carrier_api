@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from carrier_api import Config, Energy, Profile, Status, System
+from carrier_api import Config, Energy, EnergyPeriod, EnergyUsageMetric, Profile, Status, System
 from carrier_api.config import ConfigZone, ConfigZoneActivity, active_schedule_periods
 from carrier_api.const import ActivityTypes, FanModes, SystemModes
 from carrier_api.status import StatusZone
@@ -69,6 +69,32 @@ def test_energy_as_dict_current_year_and_missing_year(
     assert str(current_year) == str(current_year.as_dict())
 
 
+def test_energy_period_helpers_return_sensor_measurements(
+    energy_response: dict[str, Any],
+) -> None:
+    """Look up sensor-facing energy values without raw payload access.
+
+    Args:
+        energy_response: Parsed energy fixture.
+    """
+    energy = Energy(energy_response["infinityEnergy"])
+
+    daily = energy.measurement_for_period(EnergyPeriod.DAY_1)
+    monthly = energy.current_month_measurements()
+    yearly = energy.current_year_measurements()
+
+    assert daily is energy.current_day_measurements()
+    assert daily is not None
+    assert monthly is not None
+    assert yearly is not None
+    assert daily.value_for_metric(EnergyUsageMetric.GAS) == 397
+    assert monthly.value_for_metric(EnergyUsageMetric.GAS) == 11012
+    assert yearly.value_for_metric(EnergyUsageMetric.GAS) == 25905
+    assert yearly.value_for_metric("hp_heat") == 0
+    assert yearly.value_for_metric("unknown") is None
+    assert energy.measurement_for_period("missing") is None
+
+
 def test_status_modes_zone_conditioning_and_serialization(
     system_response: dict[str, Any],
 ) -> None:
@@ -92,6 +118,19 @@ def test_status_modes_zone_conditioning_and_serialization(
     assert status.zones[0].current_status_activity_type == ActivityTypes.HOME
     assert status.as_dict()["time_stamp"] == datetime(2025, 3, 3, 13, 42, 34, 328000, UTC)
     assert status.as_dict()["uv_lamp_level"] == 100
+    assert status.outdoor_unit is not None
+    assert status.outdoor_unit.as_dict() == {
+        "type": "ac2stgeverest",
+        "operational_status": "off",
+    }
+    assert status.indoor_unit is not None
+    assert status.indoor_unit.as_dict() == {
+        "type": "furnace2stg",
+        "operational_status": "low",
+        "airflow_cfm": 1239,
+        "static_pressure": 1.399999976158142,
+        "blower_rpm": 1224,
+    }
     assert repr(status.zones[0]) == str(status.zones[0].as_dict())
 
     cool_zone = StatusZone({**raw_status["zones"][0], "zoneconditioning": "active_cool"})

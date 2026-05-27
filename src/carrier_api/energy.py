@@ -1,11 +1,36 @@
 """Energy configuration and usage models for Carrier systems."""
 
+from enum import StrEnum
 from logging import getLogger
 from typing import Any
 
 from .util import safely_get_json_value
 
 _LOGGER = getLogger(__name__)
+
+
+class EnergyPeriod(StrEnum):
+    """Carrier energy reporting period identifiers."""
+
+    DAY_1 = "day1"
+    DAY_2 = "day2"
+    MONTH_1 = "month1"
+    MONTH_2 = "month2"
+    YEAR_1 = "year1"
+    YEAR_2 = "year2"
+
+
+class EnergyUsageMetric(StrEnum):
+    """Normalized Carrier energy usage metric names."""
+
+    COOLING = "cooling"
+    HP_HEAT = "hp_heat"
+    FAN = "fan"
+    ELECTRIC_HEAT = "electric_heat"
+    REHEAT = "reheat"
+    FAN_GAS = "fan_gas"
+    GAS = "gas"
+    LOOP_PUMP = "loop_pump"
 
 
 class EnergyMeasurement:
@@ -27,6 +52,22 @@ class EnergyMeasurement:
         self.fan_gas: int = safely_get_json_value(energy_measurement_json, "fanGasKwh", int)
         self.gas: int = safely_get_json_value(energy_measurement_json, "gasKwh", int)
         self.loop_pump: int = safely_get_json_value(energy_measurement_json, "loopPumpKwh", int)
+
+    def value_for_metric(self, metric: EnergyUsageMetric | str) -> int | None:
+        """Return the energy total for a normalized metric name.
+
+        Args:
+            metric: Normalized metric enum or string such as ``gas`` or
+                ``hp_heat``.
+
+        Returns:
+            The integer energy total for the metric, or ``None`` when the
+            metric is not known.
+        """
+        metric_name = metric.value if isinstance(metric, EnergyUsageMetric) else metric
+        if metric_name not in EnergyUsageMetric:
+            return None
+        return getattr(self, metric_name)
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the usage measurement.
@@ -118,6 +159,40 @@ class Energy:
         for period_json in self.raw["energyPeriods"]:
             self.periods.append(EnergyMeasurement(period_json))
 
+    def measurement_for_period(self, period_id: EnergyPeriod | str) -> EnergyMeasurement | None:
+        """Find energy totals for a Carrier reporting period.
+
+        Args:
+            period_id: Carrier reporting period identifier such as ``year1``.
+
+        Returns:
+            The measurement whose Carrier period identifier matches, or
+            ``None`` when the payload does not contain that period.
+        """
+        period_value = period_id.value if isinstance(period_id, EnergyPeriod) else period_id
+        for period in self.periods or []:
+            if period.api_id == period_value:
+                return period
+        return None
+
+    def current_day_measurements(self) -> EnergyMeasurement | None:
+        """Find the energy totals for the current-day reporting period.
+
+        Returns:
+            The measurement whose Carrier period identifier is ``day1``, or
+            ``None`` when the payload does not contain that period.
+        """
+        return self.measurement_for_period(EnergyPeriod.DAY_1)
+
+    def current_month_measurements(self) -> EnergyMeasurement | None:
+        """Find the energy totals for the current-month reporting period.
+
+        Returns:
+            The measurement whose Carrier period identifier is ``month1``, or
+            ``None`` when the payload does not contain that period.
+        """
+        return self.measurement_for_period(EnergyPeriod.MONTH_1)
+
     def current_year_measurements(self) -> EnergyMeasurement | None:
         """Find the energy totals for the current-year reporting period.
 
@@ -125,10 +200,7 @@ class Energy:
             The measurement whose Carrier period identifier is ``year1``, or
             ``None`` when the payload does not contain that period.
         """
-        for period in self.periods or []:
-            if period.api_id == "year1":
-                return period
-        return None
+        return self.measurement_for_period(EnergyPeriod.YEAR_1)
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of energy configuration and usage.
