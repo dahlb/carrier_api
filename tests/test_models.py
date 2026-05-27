@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from carrier_api import (
-    ENERGY_USAGE_METRICS,
+    ENERGY_USAGE_METRIC_LABELS,
     Config,
     Energy,
     EnergyPeriod,
@@ -104,7 +104,7 @@ def test_energy_period_helpers_return_sensor_measurements(
     assert energy.value_for_period_metric(EnergyPeriod.DAY_1, EnergyUsageMetric.GAS) == 397
     assert energy.value_for_period_metric(EnergyPeriod.MONTH_1, "gas") == 11012
     assert energy.value_for_period_metric(EnergyPeriod.YEAR_1, "hp_heat") == 0
-    assert energy.value_for_period_metric("missing", EnergyUsageMetric.GAS) is None
+    assert energy.value_for_period_metric("missing", "gas") is None
     assert energy.value_for_period_metric(EnergyPeriod.YEAR_1, "unknown") is None
     assert yearly.value_for_metric("hp_heat") == 0
     assert yearly.value_for_metric("unknown") is None
@@ -160,16 +160,6 @@ def test_energy_enabled_usage_metrics_use_api_metric_vocabulary(
     """
     energy = Energy(energy_response["infinityEnergy"])
 
-    assert ENERGY_USAGE_METRICS == (
-        EnergyUsageMetric.COOLING,
-        EnergyUsageMetric.ELECTRIC_HEAT,
-        EnergyUsageMetric.FAN_GAS,
-        EnergyUsageMetric.FAN,
-        EnergyUsageMetric.GAS,
-        EnergyUsageMetric.HP_HEAT,
-        EnergyUsageMetric.LOOP_PUMP,
-        EnergyUsageMetric.REHEAT,
-    )
     assert energy.enabled_usage_metrics() == (
         EnergyUsageMetric.COOLING,
         EnergyUsageMetric.GAS,
@@ -182,15 +172,25 @@ def test_energy_enabled_usage_metrics_use_api_metric_vocabulary(
 
 def test_energy_usage_metrics_expose_display_labels() -> None:
     """Expose human-readable labels for sensor names."""
-    assert {metric.value: metric.label for metric in ENERGY_USAGE_METRICS} == {
+    assert ENERGY_USAGE_METRIC_LABELS == {
+        EnergyUsageMetric.COOLING: "Cooling",
+        EnergyUsageMetric.ELECTRIC_HEAT: "Electric Heat",
+        EnergyUsageMetric.FAN_GAS: "Fan Gas",
+        EnergyUsageMetric.FAN: "Fan",
+        EnergyUsageMetric.GAS: "Gas",
+        EnergyUsageMetric.HP_HEAT: "Heat Pump Heat",
+        EnergyUsageMetric.LOOP_PUMP: "Loop Pump",
+        EnergyUsageMetric.REHEAT: "Reheat",
+    }
+    assert {metric.value: metric.label for metric in EnergyUsageMetric} == {
         "cooling": "Cooling",
-        "electric_heat": "Electric Heat",
-        "fan_gas": "Fan Gas",
-        "fan": "Fan",
-        "gas": "Gas",
         "hp_heat": "Heat Pump Heat",
-        "loop_pump": "Loop Pump",
+        "fan": "Fan",
+        "electric_heat": "Electric Heat",
         "reheat": "Reheat",
+        "fan_gas": "Fan Gas",
+        "gas": "Gas",
+        "loop_pump": "Loop Pump",
     }
 
 

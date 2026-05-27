@@ -1,5 +1,6 @@
 """Energy configuration and usage models for Carrier systems."""
 
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
@@ -36,31 +37,32 @@ class EnergyUsageMetric(StrEnum):
         Returns:
             Display label suitable for sensor names.
         """
-        return _ENERGY_USAGE_METRIC_LABELS[self]
+        return _ENERGY_METRICS[self].label
 
 
-ENERGY_USAGE_METRICS: tuple[EnergyUsageMetric, ...] = (
-    EnergyUsageMetric.COOLING,
-    EnergyUsageMetric.ELECTRIC_HEAT,
-    EnergyUsageMetric.FAN_GAS,
-    EnergyUsageMetric.FAN,
-    EnergyUsageMetric.GAS,
-    EnergyUsageMetric.HP_HEAT,
-    EnergyUsageMetric.LOOP_PUMP,
-    EnergyUsageMetric.REHEAT,
-)
-"""Canonical order for Carrier energy usage metrics."""
+@dataclass(frozen=True)
+class _EnergyMetricSpec:
+    """Carrier field mapping for a normalized energy usage metric."""
+
+    label: str
+    config_key: str
+    period_key: str
 
 
-_ENERGY_USAGE_METRIC_LABELS: dict[EnergyUsageMetric, str] = {
-    EnergyUsageMetric.COOLING: "Cooling",
-    EnergyUsageMetric.ELECTRIC_HEAT: "Electric Heat",
-    EnergyUsageMetric.FAN_GAS: "Fan Gas",
-    EnergyUsageMetric.FAN: "Fan",
-    EnergyUsageMetric.GAS: "Gas",
-    EnergyUsageMetric.HP_HEAT: "Heat Pump Heat",
-    EnergyUsageMetric.LOOP_PUMP: "Loop Pump",
-    EnergyUsageMetric.REHEAT: "Reheat",
+_ENERGY_METRICS: dict[EnergyUsageMetric, _EnergyMetricSpec] = {
+    EnergyUsageMetric.COOLING: _EnergyMetricSpec("Cooling", "cooling", "coolingKwh"),
+    EnergyUsageMetric.HP_HEAT: _EnergyMetricSpec("Heat Pump Heat", "hpheat", "hPHeatKwh"),
+    EnergyUsageMetric.FAN: _EnergyMetricSpec("Fan", "fan", "fanKwh"),
+    EnergyUsageMetric.ELECTRIC_HEAT: _EnergyMetricSpec("Electric Heat", "eheat", "eHeatKwh"),
+    EnergyUsageMetric.REHEAT: _EnergyMetricSpec("Reheat", "reheat", "reheatKwh"),
+    EnergyUsageMetric.FAN_GAS: _EnergyMetricSpec("Fan Gas", "fangas", "fanGasKwh"),
+    EnergyUsageMetric.GAS: _EnergyMetricSpec("Gas", "gas", "gasKwh"),
+    EnergyUsageMetric.LOOP_PUMP: _EnergyMetricSpec("Loop Pump", "looppump", "loopPumpKwh"),
+}
+
+# Human-readable labels for sensor-facing Carrier energy usage metrics.
+ENERGY_USAGE_METRIC_LABELS: dict[EnergyUsageMetric, str] = {
+    metric: spec.label for metric, spec in _ENERGY_METRICS.items()
 }
 
 
@@ -79,8 +81,36 @@ def _coerce_energy_usage_metric(metric: EnergyUsageMetric | str) -> EnergyUsageM
         return None
 
 
+def _energy_config_metric_enabled(raw: dict[str, Any], metric: EnergyUsageMetric) -> bool:
+    """Return whether Carrier marks a usage metric displayable and enabled.
+
+    Args:
+        raw: Raw ``infinityEnergy`` object returned by the Carrier GraphQL API.
+        metric: Normalized usage metric to inspect.
+
+    Returns:
+        ``True`` when the matching Carrier energy config entry is displayable
+        and enabled.
+    """
+    config_key = _ENERGY_METRICS[metric].config_key
+    return (
+        safely_get_json_value(raw, f"energyConfig.{config_key}.display", bool) is True
+        and safely_get_json_value(raw, f"energyConfig.{config_key}.enabled", bool) is True
+    )
+
+
 class EnergyMeasurement:
     """Energy usage totals for a single Carrier reporting period."""
+
+    api_id: str | None = None
+    cooling: float | None = None
+    hp_heat: float | None = None
+    fan: float | None = None
+    electric_heat: float | None = None
+    reheat: float | None = None
+    fan_gas: float | None = None
+    gas: float | None = None
+    loop_pump: float | None = None
 
     def __init__(self, energy_measurement_json: dict[str, Any]) -> None:
         """Build an energy measurement from a Carrier energy period payload.
@@ -90,16 +120,12 @@ class EnergyMeasurement:
                 GraphQL API.
         """
         self.api_id = safely_get_json_value(energy_measurement_json, "energyPeriodType")
-        self.cooling: float = safely_get_json_value(energy_measurement_json, "coolingKwh", float)
-        self.hp_heat: float = safely_get_json_value(energy_measurement_json, "hPHeatKwh", float)
-        self.fan: float = safely_get_json_value(energy_measurement_json, "fanKwh", float)
-        self.electric_heat: float = safely_get_json_value(
-            energy_measurement_json, "eHeatKwh", float
-        )
-        self.reheat: float = safely_get_json_value(energy_measurement_json, "reheatKwh", float)
-        self.fan_gas: float = safely_get_json_value(energy_measurement_json, "fanGasKwh", float)
-        self.gas: float = safely_get_json_value(energy_measurement_json, "gasKwh", float)
-        self.loop_pump: float = safely_get_json_value(energy_measurement_json, "loopPumpKwh", float)
+        for metric, spec in _ENERGY_METRICS.items():
+            setattr(
+                self,
+                metric.value,
+                safely_get_json_value(energy_measurement_json, spec.period_key, float),
+            )
 
     def value_for_metric(self, metric: EnergyUsageMetric | str) -> float | None:
         """Return the energy total for a normalized metric name.
@@ -123,16 +149,8 @@ class EnergyMeasurement:
         Returns:
             A dictionary containing kWh usage by energy category.
         """
-        return {
-            "id": self.api_id,
-            "cooling": self.cooling,
-            "hp_heat": self.hp_heat,
-            "fan": self.fan,
-            "electric_heat": self.electric_heat,
-            "reheat": self.reheat,
-            "fan_gas": self.fan_gas,
-            "gas": self.gas,
-            "loop_pump": self.loop_pump,
+        return {"id": self.api_id} | {
+            metric.value: self.value_for_metric(metric) for metric in _ENERGY_METRICS
         }
 
     def __repr__(self) -> str:
@@ -179,30 +197,8 @@ class Energy:
         self.raw = raw
         self.seer: float = safely_get_json_value(self.raw, "energyConfig.seer", float)
         self.hspf: float = safely_get_json_value(self.raw, "energyConfig.hspf", float)
-        self.cooling: bool = safely_get_json_value(
-            self.raw, "energyConfig.cooling.display", bool
-        ) and safely_get_json_value(self.raw, "energyConfig.cooling.enabled", bool)
-        self.hp_heat: bool = safely_get_json_value(
-            self.raw, "energyConfig.hpheat.display", bool
-        ) and safely_get_json_value(self.raw, "energyConfig.hpheat.enabled", bool)
-        self.fan: bool = safely_get_json_value(
-            self.raw, "energyConfig.fan.display", bool
-        ) and safely_get_json_value(self.raw, "energyConfig.fan.enabled", bool)
-        self.electric_heat: bool = safely_get_json_value(
-            self.raw, "energyConfig.eheat.display", bool
-        ) and safely_get_json_value(self.raw, "energyConfig.eheat.enabled", bool)
-        self.reheat: bool = safely_get_json_value(
-            self.raw, "energyConfig.reheat.display", bool
-        ) and safely_get_json_value(self.raw, "energyConfig.reheat.enabled", bool)
-        self.fan_gas: bool = safely_get_json_value(
-            self.raw, "energyConfig.fangas.display", bool
-        ) and safely_get_json_value(self.raw, "energyConfig.fangas.enabled", bool)
-        self.gas: bool = safely_get_json_value(
-            self.raw, "energyConfig.gas.display", bool
-        ) and safely_get_json_value(self.raw, "energyConfig.gas.enabled", bool)
-        self.loop_pump: bool = safely_get_json_value(
-            self.raw, "energyConfig.looppump.display", bool
-        ) and safely_get_json_value(self.raw, "energyConfig.looppump.enabled", bool)
+        for metric in _ENERGY_METRICS:
+            setattr(self, metric.value, _energy_config_metric_enabled(self.raw, metric))
         self.periods = []
         for period_json in self.raw["energyPeriods"]:
             self.periods.append(EnergyMeasurement(period_json))
@@ -291,9 +287,7 @@ class Energy:
         Returns:
             Enabled metrics in the canonical Carrier API iteration order.
         """
-        return tuple(
-            metric for metric in ENERGY_USAGE_METRICS if self.is_usage_metric_enabled(metric)
-        )
+        return tuple(metric for metric in _ENERGY_METRICS if self.is_usage_metric_enabled(metric))
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of energy configuration and usage.
