@@ -2,10 +2,13 @@
 
 from datetime import UTC, datetime
 from logging import getLogger
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .const import ActivityTypes, FanModes
 from .util import safely_get_json_value
+
+if TYPE_CHECKING:
+    from .status import StatusZone
 
 _LOGGER = getLogger(__name__)
 
@@ -137,17 +140,23 @@ class ConfigZone:
         today_schedule_json = self.program_json["day"][sunday_0_index_today]
         return active_schedule_periods(today_schedule_json["period"])
 
-    def current_activity(self) -> ConfigZoneActivity | None:
-        """Determine the zone activity that should currently be active.
+    def current_scheduled_activity(self) -> ConfigZoneActivity | None:
+        """Determine the zone activity implied by local schedule configuration.
 
-        Held zones resolve directly to their hold activity. Scheduled zones use
-        the latest enabled period earlier than the current local time, falling
-        back to yesterday's final enabled period when today's schedule has not
-        started yet.
+        This is schedule/configuration-derived. Held zones resolve directly to
+        their configured hold activity. Non-held zones use the latest enabled
+        schedule period earlier than the current local time, falling back to
+        yesterday's final enabled period when today's schedule has not started
+        yet.
+
+        Use ``current_status_activity`` when resolving Carrier's live
+        ``StatusZone.current_status_activity_type`` report instead of the local
+        schedule calculation.
 
         Returns:
-            The configured current activity, or ``None`` when no active period is
-            available in today or yesterday's schedule.
+            The activity profile implied by schedule/configuration data, or
+            ``None`` when no active period is available in today or yesterday's
+            schedule.
         """
         if self.hold:
             return self.find_activity(self.hold_activity)
@@ -155,7 +164,7 @@ class ConfigZone:
         reversed_active_periods = reversed(self.today_active_periods())
         for active_period in reversed_active_periods:
             hours, minutes = active_period["time"].split(":")
-            if (int(hours) < now.hour) or (int(hours) == now.hour and int(minutes) < now.minute):
+            if (int(hours) < now.hour) or (int(hours) == now.hour and int(minutes) <= now.minute):
                 return self.find_activity(
                     safely_get_json_value(active_period, "activity", ActivityTypes)
                 )
@@ -165,6 +174,48 @@ class ConfigZone:
         return self.find_activity(
             safely_get_json_value(yesterday_active_periods[-1], "activity", ActivityTypes)
         )
+
+    def current_activity(self) -> ConfigZoneActivity | None:
+        """Return the schedule-derived current activity.
+
+        Deprecated:
+            Use ``current_scheduled_activity`` instead. This alias returns the
+            schedule-derived value; it does not return Carrier's
+            live status activity and it does not return the combined
+            ``{"from_schedule": ..., "from_status": ...}`` serialization.
+
+        Use ``as_dict(status_zone)["current_activity"]`` or
+        ``System.as_dict()["config"]["zones"][...]["current_activity"]`` when
+        both schedule-derived and status-derived activity profiles are needed.
+
+        Returns:
+            The activity profile implied by schedule data, or
+            ``None`` when no active period is available.
+        """
+        return self.current_scheduled_activity()
+
+    def current_status_activity(self, status_zone: StatusZone) -> ConfigZoneActivity | None:
+        """Return the activity profile matching Carrier's live status report.
+
+        This is status-derived and always resolves the
+        ``StatusZone.current_status_activity_type`` value Carrier reported for the
+        matching zone. It intentionally does not consult local hold state
+        because config and status updates can arrive separately.
+
+        Args:
+            status_zone: Runtime zone status containing Carrier's reported
+                current activity value. This must come from the same Carrier
+                system as this config zone; status zones do not include system
+                identity, so this method can only validate the zone ID.
+
+        Returns:
+            The configured activity matching the status/hold activity, or
+            ``None`` when the status belongs to a different zone or that
+            activity is missing from this zone's configuration.
+        """
+        if status_zone.api_id != self.api_id:
+            return None
+        return self.find_activity(status_zone.current_status_activity_type)
 
     def next_activity_time(self) -> str | None:
         """Find the next scheduled activity start time.
@@ -186,18 +237,36 @@ class ConfigZone:
             return tomorrow_active_schedule_periods[0]["time"]
         return None
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self, status_zone: StatusZone | None = None) -> dict[str, Any]:
         """Return a dictionary representation of the zone configuration.
 
+        Args:
+            status_zone: Optional runtime status for this zone. When provided,
+                ``current_activity.from_status`` resolves Carrier's live status
+                activity; when omitted, that field is ``None``. The
+                ``current_activity.from_schedule`` value is always derived from
+                local schedule/hold configuration.
+
         Returns:
-            A dictionary containing hold state, occupancy configuration, current
-            activity, and configured activities.
+            A dictionary containing hold state, occupancy configuration,
+            configured activities, and ``current_activity`` split into
+            ``from_schedule`` and ``from_status`` sources.
         """
-        current_activity = self.current_activity()
+        current_scheduled_activity = self.current_scheduled_activity()
+        current_status_activity = (
+            self.current_status_activity(status_zone) if status_zone is not None else None
+        )
         builder = {
             "api_id": self.api_id,
             "name": self.name,
-            "current_activity": current_activity.as_dict() if current_activity else None,
+            "current_activity": {
+                "from_schedule": current_scheduled_activity.as_dict()
+                if current_scheduled_activity
+                else None,
+                "from_status": current_status_activity.as_dict()
+                if current_status_activity
+                else None,
+            },
             "hold_activity": self.hold_activity,
             "hold": self.hold,
             "hold_until": self.hold_until,
@@ -234,6 +303,7 @@ class Config:
     etag: str | None = None
     fuel_type: str | None = None
     gas_unit: str | None = None
+    fan_enabled: bool | None = None
     zones: list[ConfigZone]
     uv_enabled: bool | None = None
     humidifier_enabled: bool | None = None
@@ -255,6 +325,8 @@ class Config:
         self.etag = safely_get_json_value(self.raw, "etag")
         self.fuel_type = safely_get_json_value(self.raw, "fueltype")
         self.gas_unit = safely_get_json_value(self.raw, "gasunit")
+        raw_fan_enabled = safely_get_json_value(self.raw, "cfgfan")
+        self.fan_enabled = None if raw_fan_enabled is None else raw_fan_enabled == "on"
         self.uv_enabled = safely_get_json_value(self.raw, "cfguv") == "on"
         self.humidifier_enabled = safely_get_json_value(self.raw, "cfghumid") == "on"
         self.humidifier_heat_target = safely_get_json_value(self.raw, "humidityHome.rhtg", int)
@@ -271,17 +343,26 @@ class Config:
             if safely_get_json_value(zone_json, "enabled") == "on":
                 self.zones.append(ConfigZone(zone_json=zone_json, vacation_json=vacation_json))
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self, status_zones: list[StatusZone] | None = None) -> dict[str, Any]:
         """Return a dictionary representation of the system configuration.
+
+        Args:
+            status_zones: Optional runtime status zones used to include
+                status-resolved current activity profiles in zone dictionaries.
+                These must come from the same Carrier system as this config.
 
         Returns:
             A dictionary containing high-level settings and enabled zones.
         """
+        status_zones_by_id = {status_zone.api_id: status_zone for status_zone in status_zones or []}
         return {
             "temperature_unit": self.temperature_unit,
             "mode": self.mode,
             "heat_source": self.heat_source,
-            "zones": [zone.as_dict() for zone in self.zones or []],
+            "fan_enabled": self.fan_enabled,
+            "zones": [
+                zone.as_dict(status_zones_by_id.get(zone.api_id)) for zone in self.zones or []
+            ],
         }
 
     def __repr__(self) -> str:

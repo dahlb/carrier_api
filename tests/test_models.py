@@ -84,6 +84,12 @@ def test_status_modes_zone_conditioning_and_serialization(
 
     assert heat_status.mode_const == SystemModes.HEAT
     assert status.zones[0].zone_conditioning_const == SystemModes.HEAT
+    assert status.zones[0].current_status_activity_type == ActivityTypes.WAKE
+    assert status.zones[0].current_activity == ActivityTypes.WAKE
+    assert status.zones[0].as_dict()["current_status_activity_type"] == "wake"
+    assert "current_activity" not in status.zones[0].as_dict()
+    status.zones[0].current_activity = ActivityTypes.HOME
+    assert status.zones[0].current_status_activity_type == ActivityTypes.HOME
     assert status.as_dict()["time_stamp"] == datetime(2025, 3, 3, 13, 42, 34, 328000, UTC)
     assert status.as_dict()["uv_lamp_level"] == 100
     assert repr(status.zones[0]) == str(status.zones[0].as_dict())
@@ -132,13 +138,109 @@ def test_config_schedule_branches_and_serialization(system_response: dict[str, A
     assert zone.find_activity(ActivityTypes.MANUAL) is not None
     assert zone.today_active_periods()
     assert zone.yesterday_active_periods()
-    assert zone.current_activity() is not None
-    assert held_zone.current_activity() is held_zone.find_activity(ActivityTypes.MANUAL)
+    assert zone.current_scheduled_activity() is not None
+    assert zone.current_activity() is zone.current_scheduled_activity()
+    assert held_zone.current_scheduled_activity() is held_zone.find_activity(ActivityTypes.MANUAL)
     assert zone.next_activity_time() is not None
     assert config.humidifier_heat_target == 35
     assert config.as_dict()["zones"][0]["activities"][-1]["type"] == "vacation"
+    assert config.as_dict()["zones"][0]["current_activity"]["from_status"] is None
     assert repr(config) == str(config.as_dict())
     assert str(zone) == str(zone.as_dict())
+
+
+def test_config_zone_current_activity_from_status_uses_api_reported_profile(
+    system_response: dict[str, Any],
+) -> None:
+    """Resolve the current activity profile from Carrier status data.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    raw_system = system_response["infinitySystems"][0]
+    config = Config(raw_system["config"])
+    status = Status(raw_system["status"])
+    zone = config.zones[0]
+    status_zone = status.zones[0]
+
+    current_status_activity = zone.current_status_activity(status_zone)
+
+    assert current_status_activity is not None
+    current_scheduled_activity = zone.current_scheduled_activity()
+    assert current_scheduled_activity is not None
+    assert current_status_activity.type == ActivityTypes.WAKE
+    assert current_status_activity is zone.find_activity(ActivityTypes.WAKE)
+    assert zone.as_dict(status_zone)["current_activity"] == {
+        "from_schedule": current_scheduled_activity.as_dict(),
+        "from_status": current_status_activity.as_dict(),
+    }
+
+
+def test_config_zone_current_activity_from_status_uses_status_when_config_hold_lags(
+    system_response: dict[str, Any],
+) -> None:
+    """Resolve status activity from status data even when config hold state lags.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    raw_system = system_response["infinitySystems"][0]
+    raw_config = deepcopy(raw_system["config"])
+    raw_status = deepcopy(raw_system["status"])
+    raw_config["zones"][0]["hold"] = "on"
+    raw_config["zones"][0]["holdActivity"] = "manual"
+    raw_status["zones"][0]["currentActivity"] = "wake"
+    config = Config(raw_config)
+    status = Status(raw_status)
+    zone = config.zones[0]
+
+    current_status_activity = zone.current_status_activity(status.zones[0])
+
+    assert current_status_activity is not None
+    assert current_status_activity.type == ActivityTypes.WAKE
+
+
+def test_config_zone_current_activity_from_status_returns_none_for_missing_profile(
+    system_response: dict[str, Any],
+) -> None:
+    """Return no profile when Carrier reports an activity not present in config.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    raw_system = system_response["infinitySystems"][0]
+    raw_config = deepcopy(raw_system["config"])
+    raw_status = deepcopy(raw_system["status"])
+    raw_config["zones"][0]["activities"] = [
+        activity for activity in raw_config["zones"][0]["activities"] if activity["type"] != "wake"
+    ]
+    config = Config(raw_config)
+    status = Status(raw_status)
+
+    assert config.zones[0].current_status_activity(status.zones[0]) is None
+
+
+def test_config_zone_current_activity_from_status_returns_none_for_wrong_zone(
+    system_response: dict[str, Any],
+) -> None:
+    """Return no profile when the supplied status belongs to another zone.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    raw_system = system_response["infinitySystems"][0]
+    config = Config(raw_system["config"])
+    wrong_status_zone = StatusZone(
+        {
+            **raw_system["status"]["zones"][0],
+            "id": "2",
+            "enabled": "on",
+            "currentActivity": "wake",
+        }
+    )
+
+    assert config.zones[0].current_status_activity(wrong_status_zone) is None
+    assert config.zones[0].as_dict(wrong_status_zone)["current_activity"]["from_status"] is None
 
 
 def test_config_next_activity_time_returns_none_when_today_and_tomorrow_are_disabled() -> None:
@@ -198,9 +300,109 @@ def test_system_as_dict_uses_nested_model_dictionaries(
 
     assert system.as_dict()["profile"] == system.profile.as_dict()
     assert system.as_dict()["status"] == system.status.as_dict()
-    assert system.as_dict()["config"] == system.config.as_dict()
+    assert system.as_dict()["config"] == system.config.as_dict(system.status.zones)
     assert system.as_dict()["energy"] == system.energy.as_dict()
+    assert (
+        system.as_dict()["config"]["zones"][0]["current_activity"]["from_status"]["type"] == "wake"
+    )
     assert repr(system) == str(system.as_dict())
+
+
+def test_system_reports_supported_hvac_capabilities_from_equipment_and_config(
+    systems: list[System],
+) -> None:
+    """Expose supported heat, cool, and fan controls from best-known raw data.
+
+    Args:
+        systems: Prepared system fixture models.
+    """
+    system = systems[0]
+
+    assert system.supports_heat()
+    assert system.supports_cool()
+    assert system.supports_fan()
+    assert system.supported_hvac_capabilities() == {
+        "heat": True,
+        "cool": True,
+        "fan": True,
+    }
+    assert system.as_dict()["supported_hvac_capabilities"] == {
+        "heat": True,
+        "cool": True,
+        "fan": True,
+    }
+
+
+def test_system_hvac_capabilities_ignore_profile_equipment_strings(
+    system_response: dict[str, Any],
+    energy_response: dict[str, Any],
+) -> None:
+    """Avoid reporting heat/cool support from free-form profile strings.
+
+    Args:
+        system_response: Parsed systems fixture.
+        energy_response: Parsed energy fixture.
+    """
+    raw_system = deepcopy(system_response["infinitySystems"][0])
+    raw_system["profile"]["idutype"] = "furnace"
+    raw_system["profile"]["idusource"] = "gas"
+    raw_system["profile"]["odutype"] = "ac2stg"
+    raw_system["config"]["cfgfan"] = "off"
+    raw_energy = deepcopy(energy_response["infinityEnergy"])
+    for energy_config in raw_energy["energyConfig"].values():
+        if isinstance(energy_config, dict):
+            energy_config["display"] = False
+            energy_config["enabled"] = False
+    system = System(
+        Profile(raw_system["profile"]),
+        Status(raw_system["status"]),
+        Config(raw_system["config"]),
+        Energy(raw_energy),
+    )
+
+    assert system.supported_hvac_capabilities() == {
+        "heat": False,
+        "cool": False,
+        "fan": False,
+    }
+
+
+def test_system_hvac_capabilities_do_not_let_activity_fan_override_cfgfan_off(
+    systems: list[System],
+) -> None:
+    """Treat cfgfan as authoritative when Carrier provides that flag.
+
+    Args:
+        systems: Prepared system fixture models.
+    """
+    system = systems[0]
+    system.config.fan_enabled = False
+    system.energy.fan = True
+    system.energy.fan_gas = True
+
+    assert not system.supports_fan()
+    assert not system.supported_hvac_capabilities()["fan"]
+
+
+def test_system_hvac_capabilities_fall_back_to_energy_fan_flags(
+    systems: list[System],
+) -> None:
+    """Use energy fan flags when cfgfan is absent.
+
+    Args:
+        systems: Prepared system fixture models.
+    """
+    system = systems[0]
+    system.config.fan_enabled = None
+    system.energy.fan = False
+    system.energy.fan_gas = False
+
+    assert not system.supports_fan()
+
+    system.energy.fan = True
+
+    assert system.supports_fan()
+    assert system.supported_hvac_capabilities()["fan"]
 
 
 def test_safely_get_json_value_handles_nested_lists_none_and_cast_failures() -> None:

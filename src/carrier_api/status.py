@@ -13,7 +13,7 @@ _LOGGER = getLogger(__name__)
 
 
 class StatusZone:
-    """Runtime status for a single Carrier zone."""
+    """Runtime status reported by Carrier for a single zone."""
 
     def __init__(self, status_zone_json: dict[str, Any]) -> None:
         """Build zone status from a Carrier status zone payload.
@@ -23,7 +23,12 @@ class StatusZone:
         """
         self.api_id = safely_get_json_value(status_zone_json, "id", str)
         self.name: str = safely_get_json_value(status_zone_json, "name")
-        self.current_activity: ActivityTypes = ActivityTypes(status_zone_json["currentActivity"])
+        # This is only Carrier's reported activity type. Use
+        # ConfigZone.current_status_activity(status_zone) to resolve the full
+        # activity profile with fan mode and heat/cool set points.
+        self.current_status_activity_type: ActivityTypes = ActivityTypes(
+            status_zone_json["currentActivity"]
+        )
         self.temperature: float = safely_get_json_value(status_zone_json, "rt", float)
         self.humidity: int = safely_get_json_value(status_zone_json, "rh", int)
         self.occupancy: bool = safely_get_json_value(status_zone_json, "occupancy") == "occupied"
@@ -34,6 +39,37 @@ class StatusZone:
         self.cool_set_point: float = safely_get_json_value(status_zone_json, "clsp", float)
         self.conditioning: str = safely_get_json_value(status_zone_json, "zoneconditioning")
         self.damper_position: int = safely_get_json_value(status_zone_json, "damperposition", int)
+
+    @property
+    def current_activity(self) -> ActivityTypes:
+        """Return Carrier's live current activity report.
+
+        Deprecated:
+            Use ``current_status_activity_type`` instead. This alias returns the
+            same Carrier status-derived value; it does not return the
+            schedule-derived activity or the combined ``current_activity``
+            serialization from ``ConfigZone.as_dict()``.
+
+        This property remains as a compatibility alias for integrations that
+        still read ``StatusZone.current_activity``.
+
+        Returns:
+            Carrier's reported current activity for this status zone.
+        """
+        return self.current_status_activity_type
+
+    @current_activity.setter
+    def current_activity(self, value: ActivityTypes) -> None:
+        """Set Carrier's live current activity through the compatibility alias.
+
+        Deprecated:
+            Assign ``current_status_activity_type`` instead. This setter updates
+            the same status-derived value as ``current_status_activity_type``.
+
+        Args:
+            value: Activity type to store as the status-derived current activity.
+        """
+        self.current_status_activity_type = value
 
     @property
     def zone_conditioning_const(self) -> SystemModes:
@@ -63,7 +99,7 @@ class StatusZone:
         return {
             "id": self.api_id,
             "name": self.name,
-            "current_activity": self.current_activity.value,
+            "current_status_activity_type": self.current_status_activity_type.value,
             "temperature": self.temperature,
             "humidity": self.humidity,
             "fan": self.fan.value,
