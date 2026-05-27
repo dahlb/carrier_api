@@ -136,6 +136,29 @@ def test_energy_measurements_preserve_fractional_usage_values(
     assert current_day.as_dict()["cooling"] == 0.9
 
 
+@pytest.mark.parametrize("invalid_value", ["nan", "inf", "1e999"])
+def test_energy_measurements_reject_non_finite_usage_values(
+    energy_response: dict[str, Any],
+    invalid_value: str,
+) -> None:
+    """Reject non-finite energy readings instead of leaking invalid floats.
+
+    Args:
+        energy_response: Parsed energy fixture.
+        invalid_value: Invalid energy value to parse.
+    """
+    energy_payload = deepcopy(energy_response["infinityEnergy"])
+    energy_payload["energyPeriods"][0]["gasKwh"] = invalid_value
+
+    energy = Energy(energy_payload)
+    current_day = energy.current_day_measurements()
+
+    assert current_day is not None
+    assert current_day.gas is None
+    assert current_day.value_for_metric(EnergyUsageMetric.GAS) is None
+    assert current_day.as_dict()["gas"] is None
+
+
 def test_energy_measurement_missing_metric_attribute_returns_none(
     energy_response: dict[str, Any],
 ) -> None:

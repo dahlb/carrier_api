@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
+from math import isfinite
 from typing import Any
 
 from .util import safely_get_json_value
@@ -114,6 +115,8 @@ def _energy_usage_value(raw: dict[str, Any], key: str) -> EnergyUsageValue:
     """
     value = safely_get_json_value(raw, key, float)
     if value is None:
+        return None
+    if not isfinite(value):
         return None
     if value.is_integer():
         return int(value)
