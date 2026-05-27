@@ -141,6 +141,20 @@ def test_energy_enabled_usage_metrics_use_api_metric_vocabulary(
     assert energy.is_usage_metric_enabled("unknown") is False
 
 
+def test_energy_usage_metrics_expose_display_labels() -> None:
+    """Expose human-readable labels for sensor names."""
+    assert {metric.value: metric.label for metric in ENERGY_USAGE_METRICS} == {
+        "cooling": "Cooling",
+        "electric_heat": "Electric Heat",
+        "fan_gas": "Fan Gas",
+        "fan": "Fan",
+        "gas": "Gas",
+        "hp_heat": "Heat Pump Heat",
+        "loop_pump": "Loop Pump",
+        "reheat": "Reheat",
+    }
+
+
 def test_status_modes_zone_conditioning_and_serialization(
     system_response: dict[str, Any],
 ) -> None:

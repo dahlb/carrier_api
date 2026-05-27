@@ -29,6 +29,15 @@ class EnergyUsageMetric(StrEnum):
     GAS = "gas"
     LOOP_PUMP = "loop_pump"
 
+    @property
+    def label(self) -> str:
+        """Return the human-readable label for the usage metric.
+
+        Returns:
+            Display label suitable for sensor names.
+        """
+        return _ENERGY_USAGE_METRIC_LABELS[self]
+
 
 ENERGY_USAGE_METRICS: tuple[EnergyUsageMetric, ...] = (
     EnergyUsageMetric.COOLING,
@@ -41,6 +50,18 @@ ENERGY_USAGE_METRICS: tuple[EnergyUsageMetric, ...] = (
     EnergyUsageMetric.REHEAT,
 )
 """Canonical order for Carrier energy usage metrics."""
+
+
+_ENERGY_USAGE_METRIC_LABELS: dict[EnergyUsageMetric, str] = {
+    EnergyUsageMetric.COOLING: "Cooling",
+    EnergyUsageMetric.ELECTRIC_HEAT: "Electric Heat",
+    EnergyUsageMetric.FAN_GAS: "Fan Gas",
+    EnergyUsageMetric.FAN: "Fan",
+    EnergyUsageMetric.GAS: "Gas",
+    EnergyUsageMetric.HP_HEAT: "Heat Pump Heat",
+    EnergyUsageMetric.LOOP_PUMP: "Loop Pump",
+    EnergyUsageMetric.REHEAT: "Reheat",
+}
 
 
 def _coerce_energy_usage_metric(metric: EnergyUsageMetric | str) -> EnergyUsageMetric | None:
