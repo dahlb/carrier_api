@@ -8,15 +8,15 @@
 | src/carrier\_api/api\_connection\_graphql.py      |      215 |       21 |       52 |       13 |     87% |97, 151-158, 164, 171, 258-259, 594, 623, 651, 668, 690, 714, 783, 785, 819, 887 |
 | src/carrier\_api/api\_websocket.py                |       98 |       29 |       28 |        4 |     67% |81-97, 101, 118-\>120, 120-\>140, 121-\>140, 131-\>121, 159-169, 173 |
 | src/carrier\_api/api\_websocket\_data\_updater.py |       67 |        9 |       26 |        3 |     85% |89, 113-118, 122-123 |
-| src/carrier\_api/config.py                        |      120 |        6 |       30 |        5 |     93% |72, 114, 159, 181-\>179, 186, 217, 261-\>263, 301 |
+| src/carrier\_api/config.py                        |      131 |        5 |       32 |        4 |     94% |75, 167-\>165, 174, 233, 286, 333-\>335, 382 |
 | src/carrier\_api/const.py                         |       27 |        0 |        0 |        0 |    100% |           |
 | src/carrier\_api/energy.py                        |       58 |        2 |        6 |        0 |     97% |   55, 167 |
 | src/carrier\_api/errors.py                        |       13 |        0 |        0 |        0 |    100% |           |
 | src/carrier\_api/profile.py                       |       35 |        0 |        0 |        0 |    100% |           |
-| src/carrier\_api/status.py                        |       87 |        3 |       16 |        1 |     96% |92, 129-\>131, 193, 201 |
-| src/carrier\_api/system.py                        |       19 |        1 |        0 |        0 |     95% |        66 |
+| src/carrier\_api/status.py                        |       93 |        3 |       16 |        1 |     96% |128, 165-\>167, 229, 237 |
+| src/carrier\_api/system.py                        |       34 |        1 |        2 |        0 |     97% |       144 |
 | src/carrier\_api/util.py                          |       27 |        0 |        8 |        0 |    100% |           |
-| **TOTAL**                                         |  **777** |   **71** |  **166** |   **26** | **88%** |           |
+| **TOTAL**                                         |  **809** |   **70** |  **170** |   **25** | **89%** |           |
 
 
 ## Setup coverage badge
