@@ -5,7 +5,7 @@ from .api_websocket import ApiWebsocket
 from .api_websocket_data_updater import WebsocketDataUpdater
 from .config import Config, ConfigZone, ConfigZoneActivity
 from .const import ActivityTypes, FanModes, SystemModes, TemperatureUnits
-from .energy import Energy
+from .energy import Energy, EnergyMeasurement, EnergyPeriod, EnergyUsageMetric
 from .errors import (
     AuthError,
     BaseError,
@@ -16,8 +16,6 @@ from .errors import (
     CarrierApiTokenRefreshError,
     CarrierApiWebsocketError,
 )
-from .energy import Energy, EnergyMeasurement, EnergyPeriod, EnergyUsageMetric
-from .errors import AuthError, BaseError
 from .profile import Profile
 from .status import Status, StatusUnit, StatusZone
 from .system import System
