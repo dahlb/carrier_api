@@ -257,8 +257,8 @@ def test_status_modes_zone_conditioning_and_serialization(
         }
     )
     assert odu_with_airflow.outdoor_unit is not None
-    assert odu_with_airflow.outdoor_unit.airflow_cfm is None
-    assert "airflow_cfm" not in odu_with_airflow.outdoor_unit.as_dict()
+    assert odu_with_airflow.outdoor_unit.airflow_cfm == 482
+    assert odu_with_airflow.outdoor_unit.as_dict()["airflow_cfm"] == 482
     assert odu_with_airflow.airflow_cfm == 482
     assert odu_with_airflow.as_dict()["airflow_cfm"] == 482
     assert status.indoor_unit is not None
