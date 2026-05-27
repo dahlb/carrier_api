@@ -101,6 +101,11 @@ def test_energy_period_helpers_return_sensor_measurements(
     assert daily.value_for_metric(EnergyUsageMetric.GAS) == 397
     assert monthly.value_for_metric(EnergyUsageMetric.GAS) == 11012
     assert yearly.value_for_metric(EnergyUsageMetric.GAS) == 25905
+    assert energy.value_for_period_metric(EnergyPeriod.DAY_1, EnergyUsageMetric.GAS) == 397
+    assert energy.value_for_period_metric(EnergyPeriod.MONTH_1, "gas") == 11012
+    assert energy.value_for_period_metric(EnergyPeriod.YEAR_1, "hp_heat") == 0
+    assert energy.value_for_period_metric("missing", EnergyUsageMetric.GAS) is None
+    assert energy.value_for_period_metric(EnergyPeriod.YEAR_1, "unknown") is None
     assert yearly.value_for_metric("hp_heat") == 0
     assert yearly.value_for_metric("unknown") is None
     assert energy.measurement_for_period("missing") is None

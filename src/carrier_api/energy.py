@@ -215,6 +215,25 @@ class Energy:
         """
         return self.measurement_for_period(EnergyPeriod.YEAR_1)
 
+    def value_for_period_metric(
+        self, period_id: EnergyPeriod | str, metric: EnergyUsageMetric | str
+    ) -> int | None:
+        """Return an energy total for a reporting period and usage metric.
+
+        Args:
+            period_id: Carrier reporting period identifier such as ``year1``.
+            metric: Normalized metric enum or string such as ``gas`` or
+                ``hp_heat``.
+
+        Returns:
+            The integer energy total for the period and metric, or ``None``
+            when either the period or metric is not known.
+        """
+        measurement = self.measurement_for_period(period_id)
+        if measurement is None:
+            return None
+        return measurement.value_for_metric(metric)
+
     def is_usage_metric_enabled(self, metric: EnergyUsageMetric | str) -> bool:
         """Return whether an energy usage metric is enabled for this system.
 
