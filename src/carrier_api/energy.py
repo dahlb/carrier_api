@@ -6,6 +6,8 @@ from typing import Any
 
 from .util import safely_get_json_value
 
+EnergyUsageValue = int | float | None
+
 
 class EnergyPeriod(StrEnum):
     """Carrier energy reporting period identifiers."""
@@ -99,18 +101,37 @@ def _energy_config_metric_enabled(raw: dict[str, Any], metric: EnergyUsageMetric
     )
 
 
+def _energy_usage_value(raw: dict[str, Any], key: str) -> EnergyUsageValue:
+    """Return an energy usage value while preserving whole numbers as ints.
+
+    Args:
+        raw: Raw energy period payload.
+        key: Carrier energy period usage key.
+
+    Returns:
+        Integer usage for whole-number payloads, fractional usage as a float,
+        or ``None`` when the payload value is absent or invalid.
+    """
+    value = safely_get_json_value(raw, key, float)
+    if value is None:
+        return None
+    if value.is_integer():
+        return int(value)
+    return value
+
+
 class EnergyMeasurement:
     """Energy usage totals for a single Carrier reporting period."""
 
     api_id: str | None = None
-    cooling: float | None = None
-    hp_heat: float | None = None
-    fan: float | None = None
-    electric_heat: float | None = None
-    reheat: float | None = None
-    fan_gas: float | None = None
-    gas: float | None = None
-    loop_pump: float | None = None
+    cooling: EnergyUsageValue = None
+    hp_heat: EnergyUsageValue = None
+    fan: EnergyUsageValue = None
+    electric_heat: EnergyUsageValue = None
+    reheat: EnergyUsageValue = None
+    fan_gas: EnergyUsageValue = None
+    gas: EnergyUsageValue = None
+    loop_pump: EnergyUsageValue = None
 
     def __init__(self, energy_measurement_json: dict[str, Any]) -> None:
         """Build an energy measurement from a Carrier energy period payload.
@@ -124,10 +145,10 @@ class EnergyMeasurement:
             setattr(
                 self,
                 metric.value,
-                safely_get_json_value(energy_measurement_json, spec.period_key, float),
+                _energy_usage_value(energy_measurement_json, spec.period_key),
             )
 
-    def value_for_metric(self, metric: EnergyUsageMetric | str) -> float | None:
+    def value_for_metric(self, metric: EnergyUsageMetric | str) -> EnergyUsageValue:
         """Return the energy total for a normalized metric name.
 
         Args:
@@ -248,7 +269,7 @@ class Energy:
 
     def value_for_period_metric(
         self, period_id: EnergyPeriod | str, metric: EnergyUsageMetric | str
-    ) -> float | None:
+    ) -> EnergyUsageValue:
         """Return an energy total for a reporting period and usage metric.
 
         Args:

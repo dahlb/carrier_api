@@ -99,6 +99,8 @@ def test_energy_period_helpers_return_sensor_measurements(
     assert monthly is not None
     assert yearly is not None
     assert daily.value_for_metric(EnergyUsageMetric.GAS) == 397
+    assert isinstance(daily.value_for_metric(EnergyUsageMetric.GAS), int)
+    assert isinstance(daily.as_dict()["gas"], int)
     assert monthly.value_for_metric(EnergyUsageMetric.GAS) == 11012
     assert yearly.value_for_metric(EnergyUsageMetric.GAS) == 25905
     assert energy.value_for_period_metric(EnergyPeriod.DAY_1, EnergyUsageMetric.GAS) == 397
@@ -128,6 +130,7 @@ def test_energy_measurements_preserve_fractional_usage_values(
 
     assert current_day is not None
     assert current_day.cooling == 0.9
+    assert isinstance(current_day.cooling, float)
     assert current_day.value_for_metric(EnergyUsageMetric.COOLING) == 0.9
     assert energy.value_for_period_metric(EnergyPeriod.DAY_1, EnergyUsageMetric.GAS) == 397.5
     assert current_day.as_dict()["cooling"] == 0.9
@@ -231,8 +234,8 @@ def test_status_modes_zone_conditioning_and_serialization(
         }
     )
     assert odu_with_airflow.outdoor_unit is not None
-    assert odu_with_airflow.outdoor_unit.airflow_cfm == 482
-    assert odu_with_airflow.outdoor_unit.as_dict()["airflow_cfm"] == 482
+    assert odu_with_airflow.outdoor_unit.airflow_cfm is None
+    assert "airflow_cfm" not in odu_with_airflow.outdoor_unit.as_dict()
     assert odu_with_airflow.airflow_cfm == 482
     assert odu_with_airflow.as_dict()["airflow_cfm"] == 482
     assert status.indoor_unit is not None
