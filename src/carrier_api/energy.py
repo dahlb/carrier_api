@@ -33,6 +33,19 @@ class EnergyUsageMetric(StrEnum):
     LOOP_PUMP = "loop_pump"
 
 
+ENERGY_USAGE_METRICS: tuple[EnergyUsageMetric, ...] = (
+    EnergyUsageMetric.COOLING,
+    EnergyUsageMetric.ELECTRIC_HEAT,
+    EnergyUsageMetric.FAN_GAS,
+    EnergyUsageMetric.FAN,
+    EnergyUsageMetric.GAS,
+    EnergyUsageMetric.HP_HEAT,
+    EnergyUsageMetric.LOOP_PUMP,
+    EnergyUsageMetric.REHEAT,
+)
+"""Canonical order for Carrier energy usage metrics."""
+
+
 class EnergyMeasurement:
     """Energy usage totals for a single Carrier reporting period."""
 
@@ -201,6 +214,32 @@ class Energy:
             ``None`` when the payload does not contain that period.
         """
         return self.measurement_for_period(EnergyPeriod.YEAR_1)
+
+    def is_usage_metric_enabled(self, metric: EnergyUsageMetric | str) -> bool:
+        """Return whether an energy usage metric is enabled for this system.
+
+        Args:
+            metric: Normalized metric enum or string such as ``gas`` or
+                ``cooling``.
+
+        Returns:
+            ``True`` when Carrier reports the metric as both displayable and
+            enabled, otherwise ``False``.
+        """
+        metric_name = metric.value if isinstance(metric, EnergyUsageMetric) else metric
+        if metric_name not in EnergyUsageMetric:
+            return False
+        return getattr(self, metric_name, False) is True
+
+    def enabled_usage_metrics(self) -> tuple[EnergyUsageMetric, ...]:
+        """Return energy usage metrics enabled for this system.
+
+        Returns:
+            Enabled metrics in the canonical Carrier API iteration order.
+        """
+        return tuple(
+            metric for metric in ENERGY_USAGE_METRICS if self.is_usage_metric_enabled(metric)
+        )
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of energy configuration and usage.

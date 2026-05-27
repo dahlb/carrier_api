@@ -6,7 +6,16 @@ from typing import Any
 
 import pytest
 
-from carrier_api import Config, Energy, EnergyPeriod, EnergyUsageMetric, Profile, Status, System
+from carrier_api import (
+    ENERGY_USAGE_METRICS,
+    Config,
+    Energy,
+    EnergyPeriod,
+    EnergyUsageMetric,
+    Profile,
+    Status,
+    System,
+)
 from carrier_api.config import ConfigZone, ConfigZoneActivity, active_schedule_periods
 from carrier_api.const import ActivityTypes, FanModes, SystemModes
 from carrier_api.status import StatusZone
@@ -93,6 +102,36 @@ def test_energy_period_helpers_return_sensor_measurements(
     assert yearly.value_for_metric("hp_heat") == 0
     assert yearly.value_for_metric("unknown") is None
     assert energy.measurement_for_period("missing") is None
+
+
+def test_energy_enabled_usage_metrics_use_api_metric_vocabulary(
+    energy_response: dict[str, Any],
+) -> None:
+    """Expose enabled usage metrics without caller-owned raw field maps.
+
+    Args:
+        energy_response: Parsed energy fixture.
+    """
+    energy = Energy(energy_response["infinityEnergy"])
+
+    assert ENERGY_USAGE_METRICS == (
+        EnergyUsageMetric.COOLING,
+        EnergyUsageMetric.ELECTRIC_HEAT,
+        EnergyUsageMetric.FAN_GAS,
+        EnergyUsageMetric.FAN,
+        EnergyUsageMetric.GAS,
+        EnergyUsageMetric.HP_HEAT,
+        EnergyUsageMetric.LOOP_PUMP,
+        EnergyUsageMetric.REHEAT,
+    )
+    assert energy.enabled_usage_metrics() == (
+        EnergyUsageMetric.COOLING,
+        EnergyUsageMetric.GAS,
+    )
+    assert energy.is_usage_metric_enabled(EnergyUsageMetric.COOLING) is True
+    assert energy.is_usage_metric_enabled("gas") is True
+    assert energy.is_usage_metric_enabled(EnergyUsageMetric.ELECTRIC_HEAT) is False
+    assert energy.is_usage_metric_enabled("unknown") is False
 
 
 def test_status_modes_zone_conditioning_and_serialization(
