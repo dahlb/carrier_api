@@ -90,16 +90,18 @@ class EnergyMeasurement:
                 GraphQL API.
         """
         self.api_id = safely_get_json_value(energy_measurement_json, "energyPeriodType")
-        self.cooling: int = safely_get_json_value(energy_measurement_json, "coolingKwh", int)
-        self.hp_heat: int = safely_get_json_value(energy_measurement_json, "hPHeatKwh", int)
-        self.fan: int = safely_get_json_value(energy_measurement_json, "fanKwh", int)
-        self.electric_heat: int = safely_get_json_value(energy_measurement_json, "eHeatKwh", int)
-        self.reheat: int = safely_get_json_value(energy_measurement_json, "reheatKwh", int)
-        self.fan_gas: int = safely_get_json_value(energy_measurement_json, "fanGasKwh", int)
-        self.gas: int = safely_get_json_value(energy_measurement_json, "gasKwh", int)
-        self.loop_pump: int = safely_get_json_value(energy_measurement_json, "loopPumpKwh", int)
+        self.cooling: float = safely_get_json_value(energy_measurement_json, "coolingKwh", float)
+        self.hp_heat: float = safely_get_json_value(energy_measurement_json, "hPHeatKwh", float)
+        self.fan: float = safely_get_json_value(energy_measurement_json, "fanKwh", float)
+        self.electric_heat: float = safely_get_json_value(
+            energy_measurement_json, "eHeatKwh", float
+        )
+        self.reheat: float = safely_get_json_value(energy_measurement_json, "reheatKwh", float)
+        self.fan_gas: float = safely_get_json_value(energy_measurement_json, "fanGasKwh", float)
+        self.gas: float = safely_get_json_value(energy_measurement_json, "gasKwh", float)
+        self.loop_pump: float = safely_get_json_value(energy_measurement_json, "loopPumpKwh", float)
 
-    def value_for_metric(self, metric: EnergyUsageMetric | str) -> int | None:
+    def value_for_metric(self, metric: EnergyUsageMetric | str) -> float | None:
         """Return the energy total for a normalized metric name.
 
         Args:
@@ -107,13 +109,13 @@ class EnergyMeasurement:
                 ``hp_heat``.
 
         Returns:
-            The integer energy total for the metric, or ``None`` when the
+            The energy total for the metric, or ``None`` when the
             metric is not known.
         """
         energy_metric = _coerce_energy_usage_metric(metric)
         if energy_metric is None:
             return None
-        return getattr(self, energy_metric.value)
+        return getattr(self, energy_metric.value, None)
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the usage measurement.
@@ -250,7 +252,7 @@ class Energy:
 
     def value_for_period_metric(
         self, period_id: EnergyPeriod | str, metric: EnergyUsageMetric | str
-    ) -> int | None:
+    ) -> float | None:
         """Return an energy total for a reporting period and usage metric.
 
         Args:
@@ -259,8 +261,8 @@ class Energy:
                 ``hp_heat``.
 
         Returns:
-            The integer energy total for the period and metric, or ``None``
-            when either the period or metric is not known.
+            The energy total for the period and metric, or ``None`` when either
+            the period or metric is not known.
         """
         measurement = self.measurement_for_period(period_id)
         if measurement is None:

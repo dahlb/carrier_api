@@ -21,7 +21,10 @@ class StatusUnit:
         """
         self.type: str = safely_get_json_value(status_unit_json, "type")
         self.operational_status: str = safely_get_json_value(status_unit_json, "opstat")
-        self.airflow_cfm: int = safely_get_json_value(status_unit_json, "cfm", int)
+        airflow_cfm: int | None = safely_get_json_value(status_unit_json, "cfm", int)
+        if airflow_cfm is None:
+            airflow_cfm = safely_get_json_value(status_unit_json, "iducfm", int)
+        self.airflow_cfm = airflow_cfm
         self.static_pressure: float = safely_get_json_value(status_unit_json, "statpress", float)
         self.blower_rpm: int = safely_get_json_value(status_unit_json, "blwrpm", int)
 

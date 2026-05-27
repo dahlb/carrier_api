@@ -363,6 +363,7 @@ class ApiConnectionGraphql:
                   odu {
                     type
                     opstat
+                    iducfm
                   }
                   filtrlvl
                   idu {

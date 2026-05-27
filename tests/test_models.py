@@ -111,6 +111,45 @@ def test_energy_period_helpers_return_sensor_measurements(
     assert energy.measurement_for_period("missing") is None
 
 
+def test_energy_measurements_preserve_fractional_usage_values(
+    energy_response: dict[str, Any],
+) -> None:
+    """Preserve fractional Carrier energy readings for sensor consumers.
+
+    Args:
+        energy_response: Parsed energy fixture.
+    """
+    energy_payload = deepcopy(energy_response["infinityEnergy"])
+    energy_payload["energyPeriods"][0]["coolingKwh"] = 0.9
+    energy_payload["energyPeriods"][0]["gasKwh"] = 397.5
+
+    energy = Energy(energy_payload)
+    current_day = energy.current_day_measurements()
+
+    assert current_day is not None
+    assert current_day.cooling == 0.9
+    assert current_day.value_for_metric(EnergyUsageMetric.COOLING) == 0.9
+    assert energy.value_for_period_metric(EnergyPeriod.DAY_1, EnergyUsageMetric.GAS) == 397.5
+    assert current_day.as_dict()["cooling"] == 0.9
+
+
+def test_energy_measurement_missing_metric_attribute_returns_none(
+    energy_response: dict[str, Any],
+) -> None:
+    """Return None when a normalized metric attribute is unavailable.
+
+    Args:
+        energy_response: Parsed energy fixture.
+    """
+    energy = Energy(energy_response["infinityEnergy"])
+    current_day = energy.current_day_measurements()
+
+    assert current_day is not None
+    del current_day.gas
+
+    assert current_day.value_for_metric(EnergyUsageMetric.GAS) is None
+
+
 def test_energy_enabled_usage_metrics_use_api_metric_vocabulary(
     energy_response: dict[str, Any],
 ) -> None:
@@ -183,6 +222,10 @@ def test_status_modes_zone_conditioning_and_serialization(
         "type": "ac2stgeverest",
         "operational_status": "off",
     }
+    odu_with_airflow = Status({**raw_status, "odu": {**raw_status["odu"], "iducfm": "482"}})
+    assert odu_with_airflow.outdoor_unit is not None
+    assert odu_with_airflow.outdoor_unit.airflow_cfm == 482
+    assert odu_with_airflow.outdoor_unit.as_dict()["airflow_cfm"] == 482
     assert status.indoor_unit is not None
     indoor_unit_data = status.indoor_unit.as_dict()
     assert indoor_unit_data == {
