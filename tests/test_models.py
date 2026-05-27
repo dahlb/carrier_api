@@ -222,10 +222,19 @@ def test_status_modes_zone_conditioning_and_serialization(
         "type": "ac2stgeverest",
         "operational_status": "off",
     }
-    odu_with_airflow = Status({**raw_status, "odu": {**raw_status["odu"], "iducfm": "482"}})
+    idu_without_airflow = {key: value for key, value in raw_status["idu"].items() if key != "cfm"}
+    odu_with_airflow = Status(
+        {
+            **raw_status,
+            "idu": idu_without_airflow,
+            "odu": {**raw_status["odu"], "iducfm": "482"},
+        }
+    )
     assert odu_with_airflow.outdoor_unit is not None
     assert odu_with_airflow.outdoor_unit.airflow_cfm == 482
     assert odu_with_airflow.outdoor_unit.as_dict()["airflow_cfm"] == 482
+    assert odu_with_airflow.airflow_cfm == 482
+    assert odu_with_airflow.as_dict()["airflow_cfm"] == 482
     assert status.indoor_unit is not None
     indoor_unit_data = status.indoor_unit.as_dict()
     assert indoor_unit_data == {
