@@ -8,7 +8,9 @@ from logging import getLogger
 from random import random
 from typing import TYPE_CHECKING
 
-from aiohttp import ClientWebSocketResponse, WSMsgType
+from aiohttp import ClientError, ClientWebSocketResponse, WSMsgType
+
+from .errors import CarrierApiWebsocketError
 
 if TYPE_CHECKING:
     from .api_connection_graphql import ApiConnectionGraphql
@@ -16,6 +18,20 @@ if TYPE_CHECKING:
 _LOGGER = getLogger(__name__)
 
 AsyncCallback = Callable[[str], Awaitable[None]]
+
+
+class _CallbackError(Exception):
+    """Internal wrapper used to avoid treating callback I/O as websocket I/O."""
+
+    def __init__(self, error: ClientError | TimeoutError | OSError) -> None:
+        """Initialize the callback error wrapper.
+
+        Args:
+            error: Original callback exception to re-raise outside websocket
+                transport normalization.
+        """
+        super().__init__(str(error))
+        self.error = error
 
 
 class ApiWebsocket:
@@ -94,22 +110,41 @@ class ApiWebsocket:
         state when the socket closes.
         """
         await self.api_connection_graphql.check_auth_expiration()
-        async with self.api_connection_graphql.api_session.ws_connect(
-            f"wss://realtime.infinity.iot.carrier.com/?Token={self.api_connection_graphql.access_token}"
-        ) as self.websocket:
-            if self.task_heartbeat is None:
-                await self.create_task_heartbeat()
-            if self.websocket is not None:
-                async for msg in self.websocket:
-                    if msg.type == WSMsgType.TEXT:
-                        if msg.data == "close cmd":
-                            await self.websocket.close()
-                            break
-                        for async_callback in self.async_callbacks:
-                            await async_callback(msg.data)
-                    elif msg.type == WSMsgType.ERROR:
-                        break
-            _LOGGER.debug("ws: closed")
+        try:
+            async with self.api_connection_graphql.api_session.ws_connect(
+                "wss://realtime.infinity.iot.carrier.com/"
+                f"?Token={self.api_connection_graphql.access_token}"
+            ) as self.websocket:
+                if self.task_heartbeat is None:
+                    await self.create_task_heartbeat()
+                if self.websocket is not None:
+                    async for msg in self.websocket:
+                        if msg.type == WSMsgType.TEXT:
+                            if msg.data == "close cmd":
+                                await self.websocket.close()
+                                break
+                            for async_callback in self.async_callbacks:
+                                try:
+                                    await async_callback(msg.data)
+                                except (ClientError, TimeoutError, OSError) as error:
+                                    raise _CallbackError(error) from error
+                        elif msg.type == WSMsgType.ERROR:
+                            websocket_error = self.websocket.exception()
+                            if websocket_error is None:
+                                raise CarrierApiWebsocketError(
+                                    "Carrier websocket connection failed"
+                                )
+                            raise CarrierApiWebsocketError(
+                                "Carrier websocket connection failed"
+                            ) from websocket_error
+                _LOGGER.debug("ws: closed")
+        except _CallbackError as error:
+            raise error.error from None
+        except CarrierApiWebsocketError:
+            raise
+        except (ClientError, TimeoutError, OSError) as error:
+            raise CarrierApiWebsocketError("Carrier websocket connection failed") from error
+        finally:
             self.websocket = None
             if self.task_heartbeat is not None:
                 self.task_heartbeat.cancel()

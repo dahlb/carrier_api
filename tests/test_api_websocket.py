@@ -4,10 +4,10 @@ from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import cast
 
-from aiohttp import ClientSession, WSMsgType
+from aiohttp import ClientConnectionError, ClientError, ClientSession, WSMsgType
 import pytest
 
-from carrier_api import ApiConnectionGraphql, ApiWebsocket
+from carrier_api import ApiConnectionGraphql, ApiWebsocket, CarrierApiWebsocketError
 
 
 class DummyApiConnectionGraphql(ApiConnectionGraphql):
@@ -91,14 +91,20 @@ class FakeHeartbeatTask:
 class FakeListenerWebsocket:
     """Async websocket iterator for listener tests."""
 
-    def __init__(self, messages: list[SimpleNamespace]) -> None:
+    def __init__(
+        self,
+        messages: list[SimpleNamespace],
+        exception: BaseException | None = None,
+    ) -> None:
         """Initialize queued websocket messages.
 
         Args:
             messages: Messages yielded by the websocket iterator.
+            exception: Optional websocket error reported by ``exception``.
         """
         self.messages = messages
         self.closed = False
+        self.exception_value = exception
 
     def __aiter__(self) -> AsyncIterator[SimpleNamespace]:
         """Return this websocket as an async iterator.
@@ -124,6 +130,14 @@ class FakeListenerWebsocket:
     async def close(self) -> None:
         """Record websocket close requests."""
         self.closed = True
+
+    def exception(self) -> BaseException | None:
+        """Return the configured websocket exception.
+
+        Returns:
+            Optional websocket receive exception.
+        """
+        return self.exception_value
 
 
 class FakeWebsocketContext:
@@ -174,6 +188,30 @@ class FakeListenerSession:
         return FakeWebsocketContext(self.websocket)
 
 
+class FailingListenerSession:
+    """Session that fails websocket connection attempts."""
+
+    def __init__(self, error: ClientError | TimeoutError | OSError) -> None:
+        """Initialize the session with the error to raise.
+
+        Args:
+            error: Connection error raised by ``ws_connect``.
+        """
+        self.error = error
+
+    def ws_connect(self, url: str) -> FakeWebsocketContext:
+        """Raise the configured websocket connection error.
+
+        Args:
+            url: Websocket URL.
+
+        Raises:
+            ClientError | TimeoutError | OSError: Always raised for this
+                failing session.
+        """
+        raise self.error
+
+
 class FakeListenerConnection(DummyApiConnectionGraphql):
     """Connection double with auth and websocket session behavior."""
 
@@ -186,6 +224,26 @@ class FakeListenerConnection(DummyApiConnectionGraphql):
         super().__init__()
         self.access_token = "token"
         self.listener_session = FakeListenerSession(websocket)
+        self.api_session = cast("ClientSession", self.listener_session)
+        self.auth_checked = False
+
+    async def check_auth_expiration(self) -> None:
+        """Record auth expiration checks."""
+        self.auth_checked = True
+
+
+class FailingListenerConnection(DummyApiConnectionGraphql):
+    """Connection double with a failing websocket session."""
+
+    def __init__(self, error: ClientError | TimeoutError | OSError) -> None:
+        """Initialize fake connection state.
+
+        Args:
+            error: Connection error raised by the fake session.
+        """
+        super().__init__()
+        self.access_token = "token"
+        self.listener_session = FailingListenerSession(error)
         self.api_session = cast("ClientSession", self.listener_session)
         self.auth_checked = False
 
@@ -254,15 +312,99 @@ async def test_listener_dispatches_text_and_closes_on_close_command() -> None:
 
 
 @pytest.mark.asyncio
-async def test_listener_breaks_on_websocket_error_message() -> None:
-    """Stop listening when the websocket yields an error message."""
-    websocket = FakeListenerWebsocket([SimpleNamespace(type=WSMsgType.ERROR, data=None)])
+@pytest.mark.parametrize(
+    "connection_error",
+    [
+        ClientConnectionError("websocket unavailable"),
+        TimeoutError("websocket timed out"),
+        OSError("websocket socket failed"),
+    ],
+)
+async def test_listener_wraps_websocket_connection_errors(
+    connection_error: ClientError | TimeoutError | OSError,
+) -> None:
+    """Raise Carrier websocket errors instead of raw aiohttp connection errors."""
+    connection = FailingListenerConnection(connection_error)
+    api_websocket = ApiWebsocket(connection)
+
+    with pytest.raises(CarrierApiWebsocketError) as error:
+        await api_websocket.listener()
+
+    assert connection.auth_checked
+    assert error.value.__cause__ is connection_error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "callback_error",
+    [
+        ClientConnectionError("callback request failed"),
+        TimeoutError("callback timed out"),
+        OSError("callback socket failed"),
+    ],
+)
+async def test_listener_does_not_wrap_callback_connection_errors(
+    callback_error: ClientError | TimeoutError | OSError,
+) -> None:
+    """Let callback I/O errors propagate instead of marking websocket failed."""
+    websocket = FakeListenerWebsocket([SimpleNamespace(type=WSMsgType.TEXT, data="payload")])
     connection = FakeListenerConnection(websocket)
     heartbeat_task = FakeHeartbeatTask()
     api_websocket = FakeHeartbeatApiWebsocket(connection, heartbeat_task)
 
-    await api_websocket.listener()
+    async def fail_callback(message: str) -> None:
+        """Raise the configured callback I/O error.
 
+        Args:
+            message: Raw websocket text.
+
+        Raises:
+            ClientError | TimeoutError | OSError: Always raised for this
+                callback.
+        """
+        raise callback_error
+
+    api_websocket.callback_add(fail_callback)
+
+    with pytest.raises(type(callback_error)) as error:
+        await api_websocket.listener()
+
+    assert error.value is callback_error
+    assert heartbeat_task.cancelled
+    assert api_websocket.websocket is None
+    assert api_websocket.task_heartbeat is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_error",
+    [
+        ClientConnectionError("websocket receive failed"),
+        TimeoutError("websocket receive timed out"),
+        OSError("websocket receive socket failed"),
+        None,
+    ],
+)
+async def test_listener_raises_websocket_error_messages(
+    websocket_error: BaseException | None,
+) -> None:
+    """Raise Carrier websocket errors for websocket error messages.
+
+    Args:
+        websocket_error: Optional aiohttp websocket exception reported by the
+            fake websocket.
+    """
+    websocket = FakeListenerWebsocket(
+        [SimpleNamespace(type=WSMsgType.ERROR, data=None)], exception=websocket_error
+    )
+    connection = FakeListenerConnection(websocket)
+    heartbeat_task = FakeHeartbeatTask()
+    api_websocket = FakeHeartbeatApiWebsocket(connection, heartbeat_task)
+
+    with pytest.raises(CarrierApiWebsocketError) as error:
+        await api_websocket.listener()
+
+    assert error.value.__cause__ is websocket_error
     assert heartbeat_task.cancelled
     assert api_websocket.websocket is None
     assert api_websocket.task_heartbeat is None

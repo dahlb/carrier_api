@@ -3,11 +3,14 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any, Self, cast
 
-from aiohttp import ClientSession
+from aiohttp import ClientConnectionError, ClientError, ClientResponseError, ClientSession
 from gql import GraphQLRequest, gql
+from gql.transport.exceptions import TransportQueryError, TransportServerError
 import pytest
 
-from carrier_api.api_connection_graphql import ApiConnectionGraphql
+import carrier_api
+from carrier_api import errors
+from carrier_api.api_connection_graphql import _GRAPHQL_ERRORS, ApiConnectionGraphql
 from carrier_api.const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from carrier_api.system import System
 
@@ -15,25 +18,45 @@ from carrier_api.system import System
 class FakeResponse:
     """Minimal aiohttp response double for token refresh tests."""
 
-    def __init__(self, payload: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        payload: object,
+        status_error: ClientResponseError | None = None,
+        json_error: BaseException | None = None,
+    ) -> None:
         """Initialize the fake response with JSON payload data.
 
         Args:
             payload: Data returned from ``json``.
+            status_error: Optional error raised by ``raise_for_status``.
+            json_error: Optional error raised by ``json``.
         """
         self.payload = payload
+        self.status_error = status_error
+        self.json_error = json_error
         self.raise_for_status_called = False
 
     def raise_for_status(self) -> None:
-        """Record that response status validation was requested."""
-        self.raise_for_status_called = True
+        """Record status validation and raise the configured status error.
 
-    async def json(self) -> dict[str, Any]:
+        Raises:
+            ClientResponseError: When ``status_error`` is configured.
+        """
+        self.raise_for_status_called = True
+        if self.status_error is not None:
+            raise self.status_error
+
+    async def json(self) -> object:
         """Return the configured JSON payload.
 
         Returns:
             The fake response payload.
+
+        Raises:
+            BaseException: When ``json_error`` is configured.
         """
+        if self.json_error is not None:
+            raise self.json_error
         return self.payload
 
 
@@ -124,6 +147,55 @@ class FakeGraphQLClient:
             "variables": variable_values,
             "operation_name": operation_name,
         }
+
+
+def graphql_client_double(
+    *,
+    result: dict[str, Any] | None = None,
+    error: BaseException | None = None,
+) -> type[object]:
+    """Create a GraphQL client double that returns or raises during execute.
+
+    Args:
+        result: Optional GraphQL result returned by ``execute``.
+        error: Optional error raised by ``execute``.
+
+    Returns:
+        A GraphQL client double class suitable for monkeypatching ``Client``.
+    """
+
+    class ConfiguredGraphQLClient:
+        """GraphQL client double with configured execute behavior."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            """Accept GraphQL client construction arguments."""
+
+        async def __aenter__(self) -> Self:
+            """Return the fake session.
+
+            Returns:
+                The fake GraphQL session.
+            """
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            """Exit the fake session context."""
+
+        async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            """Return or raise the configured GraphQL result.
+
+            Returns:
+                The configured GraphQL result.
+
+            Raises:
+                BaseException: When ``error`` is configured.
+            """
+            if error is not None:
+                raise error
+            assert result is not None
+            return result
+
+    return ConfiguredGraphQLClient
 
 
 class SpyConnection(ApiConnectionGraphql):
@@ -247,6 +319,71 @@ def connection() -> SpyConnection:
     return SpyConnection()
 
 
+def test_public_error_exports_use_carrier_api_prefix() -> None:
+    """Expose Carrier-prefixed public API exception classes."""
+    assert errors.CarrierApiError.__name__ == "CarrierApiError"
+    assert errors.CarrierApiAuthError.__name__ == "CarrierApiAuthError"
+    assert errors.CarrierApiConnectionError.__name__ == "CarrierApiConnectionError"
+    assert errors.CarrierApiGraphqlError.__name__ == "CarrierApiGraphqlError"
+    assert errors.CarrierApiTokenRefreshError.__name__ == "CarrierApiTokenRefreshError"
+    assert errors.CarrierApiWebsocketError.__name__ == "CarrierApiWebsocketError"
+    assert issubclass(errors.CarrierApiAuthError, errors.CarrierApiError)
+    assert issubclass(errors.CarrierApiConnectionError, errors.CarrierApiError)
+    assert issubclass(errors.CarrierApiConnectionError, ClientError)
+    assert issubclass(errors.CarrierApiGraphqlError, errors.CarrierApiError)
+    assert issubclass(errors.CarrierApiTokenRefreshError, errors.CarrierApiConnectionError)
+    assert not issubclass(errors.CarrierApiTokenRefreshError, errors.CarrierApiAuthError)
+    assert issubclass(errors.CarrierApiWebsocketError, errors.CarrierApiConnectionError)
+    assert carrier_api.CarrierApiError is errors.CarrierApiError
+    assert carrier_api.CarrierApiAuthError is errors.CarrierApiAuthError
+    assert carrier_api.CarrierApiConnectionError is errors.CarrierApiConnectionError
+    assert carrier_api.CarrierApiGraphqlError is errors.CarrierApiGraphqlError
+    assert carrier_api.CarrierApiTokenRefreshError is errors.CarrierApiTokenRefreshError
+    assert carrier_api.CarrierApiWebsocketError is errors.CarrierApiWebsocketError
+    assert errors.AuthError is errors.CarrierApiAuthError
+    assert errors.BaseError is errors.CarrierApiError
+    assert carrier_api.AuthError is errors.CarrierApiAuthError
+    assert carrier_api.BaseError is errors.CarrierApiError
+
+
+def test_graphql_error_tuple_catches_transport_query_errors() -> None:
+    """Include query errors explicitly in the wrapped GraphQL error set."""
+    assert TransportQueryError in _GRAPHQL_ERRORS
+
+
+@pytest.mark.asyncio
+async def test_login_failure_uses_readable_message_and_preserves_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expose a readable auth failure message while preserving payload access.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+    """
+    payload = {
+        "assistedLogin": {
+            "success": False,
+            "status": "FAILED",
+            "errorMessage": "invalid credentials",
+        }
+    }
+
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(result=payload)
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+
+    with pytest.raises(errors.CarrierApiAuthError) as error:
+        await connection.login()
+
+    assert error.value.args[0] == "Carrier assistedLogin failed: invalid credentials"
+    assert error.value.payload == payload
+
+
 @pytest.mark.asyncio
 async def test_cleanup_closes_provided_session() -> None:
     """Close the underlying HTTP session."""
@@ -260,6 +397,48 @@ async def test_cleanup_closes_provided_session() -> None:
     await connection.cleanup()
 
     assert session.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "cleanup_error",
+    [
+        ClientConnectionError("cleanup connection failed"),
+        TimeoutError("cleanup timed out"),
+        OSError("cleanup socket failed"),
+    ],
+)
+async def test_cleanup_wraps_session_close_errors(
+    cleanup_error: ClientError | TimeoutError | OSError,
+) -> None:
+    """Raise Carrier connection errors instead of raw session cleanup errors.
+
+    Args:
+        cleanup_error: Error raised by the fake session close.
+    """
+
+    class FailingCloseSession(FakeSession):
+        """Session double that fails during cleanup."""
+
+        async def close(self) -> None:
+            """Raise the configured cleanup error.
+
+            Raises:
+                ClientError | TimeoutError | OSError: Always raised for this
+                    failing session.
+            """
+            raise cleanup_error
+
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FailingCloseSession()),
+    )
+
+    with pytest.raises(errors.CarrierApiConnectionError) as error:
+        await connection.cleanup()
+
+    assert error.value.__cause__ is cleanup_error
 
 
 @pytest.mark.asyncio
@@ -290,6 +469,229 @@ async def test_refresh_auth_token_updates_token_state() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "refresh_error",
+    [
+        ClientConnectionError("token refresh connection failed"),
+        TimeoutError("token refresh timed out"),
+        OSError("token refresh socket failed"),
+    ],
+)
+async def test_refresh_auth_token_wraps_refresh_failures(
+    refresh_error: ClientError | TimeoutError | OSError,
+) -> None:
+    """Raise Carrier token refresh errors instead of raw HTTP exceptions."""
+
+    class FailingSession(FakeSession):
+        """Session double that fails token refresh requests."""
+
+        async def post(self, url: str, data: dict[str, Any]) -> FakeResponse:
+            """Raise the configured refresh error.
+
+            Args:
+                url: Requested URL.
+                data: Submitted form data.
+
+            Raises:
+                ClientError | TimeoutError | OSError: Always raised for this
+                    failing session.
+            """
+            raise refresh_error
+
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FailingSession()),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
+        await connection.refresh_auth_token()
+
+    assert error.value.__cause__ is refresh_error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "payload"),
+    [(401, {}), (400, {"error": "invalid_grant"})],
+)
+async def test_refresh_auth_token_treats_auth_rejections_as_auth_error(
+    status: int,
+    payload: object,
+) -> None:
+    """Raise auth errors for rejected token refresh responses.
+
+    Args:
+        status: HTTP status returned by the fake token endpoint.
+        payload: JSON payload returned by the fake token endpoint.
+    """
+    refresh_error = ClientResponseError(
+        request_info=None,  # type: ignore[arg-type]
+        history=(),
+        status=status,
+        message="token rejected",
+    )
+
+    session = FakeSession()
+    session.response = FakeResponse(payload, status_error=refresh_error)
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", session),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiAuthError) as error:
+        await connection.refresh_auth_token()
+
+    assert error.value.__cause__ is refresh_error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "json_error",
+    [
+        TimeoutError("refresh error body timed out"),
+        OSError("refresh error body socket failed"),
+    ],
+)
+async def test_refresh_auth_token_normalizes_unreadable_error_payloads(
+    json_error: TimeoutError | OSError,
+) -> None:
+    """Raise Carrier errors when refresh error payload reads fail.
+
+    Args:
+        json_error: Error raised while reading the refresh error response body.
+    """
+    refresh_error = ClientResponseError(
+        request_info=None,  # type: ignore[arg-type]
+        history=(),
+        status=401,
+        message="unauthorized",
+    )
+
+    session = FakeSession()
+    session.response = FakeResponse(
+        {},
+        status_error=refresh_error,
+        json_error=json_error,
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", session),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiAuthError) as error:
+        await connection.refresh_auth_token()
+
+    assert error.value.__cause__ is refresh_error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [None, ["invalid_grant"], "invalid_grant"])
+async def test_refresh_auth_token_ignores_non_object_error_payloads(
+    payload: object,
+) -> None:
+    """Keep non-object refresh error payloads in the refresh-failure bucket.
+
+    Args:
+        payload: Non-object JSON payload returned by the fake response.
+    """
+    refresh_error = ClientResponseError(
+        request_info=None,  # type: ignore[arg-type]
+        history=(),
+        status=400,
+        message="bad request",
+    )
+
+    session = FakeSession()
+    session.response = FakeResponse(payload, status_error=refresh_error)
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", session),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
+        await connection.refresh_auth_token()
+
+    assert error.value.__cause__ is refresh_error
+
+
+@pytest.mark.asyncio
+async def test_refresh_auth_token_normalizes_malformed_error_payload() -> None:
+    """Keep malformed refresh error payloads normalized as Carrier errors."""
+    refresh_error = ClientResponseError(
+        request_info=None,  # type: ignore[arg-type]
+        history=(),
+        status=400,
+        message="bad request",
+    )
+
+    session = FakeSession()
+    session.response = FakeResponse(
+        {},
+        status_error=refresh_error,
+        json_error=ValueError("invalid json"),
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", session),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
+        await connection.refresh_auth_token()
+
+    assert error.value.__cause__ is refresh_error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload", "cause_type"),
+    [
+        (
+            {
+                "expires_in": 3600,
+                "token_type": "Bearer",
+                "access_token": "new-access",
+            },
+            KeyError,
+        ),
+        (None, TypeError),
+    ],
+)
+async def test_refresh_auth_token_normalizes_malformed_success_payloads(
+    payload: object,
+    cause_type: type[BaseException],
+) -> None:
+    """Raise token refresh errors for malformed successful OAuth responses.
+
+    Args:
+        payload: Malformed successful OAuth payload returned by the fake response.
+        cause_type: Expected original exception type preserved as the cause.
+    """
+    session = FakeSession()
+    session.response = FakeResponse(payload)
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", session),
+    )
+    connection.refresh_token = "old-refresh"
+
+    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
+        await connection.refresh_auth_token()
+
+    assert isinstance(error.value.__cause__, cause_type)
+
+
+@pytest.mark.asyncio
 async def test_check_auth_expiration_logs_in_then_refreshes_when_expired(
     connection: SpyConnection,
 ) -> None:
@@ -305,6 +707,179 @@ async def test_check_auth_expiration_logs_in_then_refreshes_when_expired(
 
     assert connection.login_count == 1
     assert connection.refresh_count == 1
+
+
+@pytest.mark.asyncio
+async def test_login_wraps_graphql_query_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Raise Carrier GraphQL errors instead of raw GraphQL query exceptions.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+    """
+    transport_error = TransportQueryError("invalid credentials")
+
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+
+    with pytest.raises(errors.CarrierApiGraphqlError) as error:
+        await connection.login()
+
+    assert error.value.__cause__ is transport_error
+    assert isinstance(error.value, errors.CarrierApiError)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "transport_error",
+    [
+        ClientConnectionError("connection failed"),
+        TimeoutError("connection timed out"),
+        OSError("socket failed"),
+    ],
+)
+async def test_login_wraps_connection_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    transport_error: ClientError | TimeoutError | OSError,
+) -> None:
+    """Raise Carrier connection errors instead of raw login transport exceptions.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+        transport_error: Network or transport exception raised by the fake client.
+    """
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+
+    with pytest.raises(errors.CarrierApiConnectionError) as error:
+        await connection.login()
+
+    assert error.value.__cause__ is transport_error
+
+
+@pytest.mark.asyncio
+async def test_authed_query_wraps_graphql_query_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Raise Carrier API errors instead of raw GraphQL transport exceptions.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+    """
+    transport_error = TransportQueryError("query failed")
+
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    connection.refresh_token = "refresh"
+    connection.token_type = "Bearer"
+    connection.access_token = "access"
+    connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+    with pytest.raises(errors.CarrierApiGraphqlError) as error:
+        await connection.authed_query(
+            operation_name="getUser",
+            query=cast("GraphQLRequest", object()),
+            variable_values={},
+        )
+
+    assert error.value.__cause__ is transport_error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "transport_error",
+    [
+        TransportServerError("server unavailable", code=503),
+        ClientConnectionError("connection failed"),
+        TimeoutError("connection timed out"),
+        OSError("socket failed"),
+    ],
+)
+async def test_authed_query_wraps_connection_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    transport_error: Exception | TimeoutError | OSError,
+) -> None:
+    """Raise Carrier connection errors instead of raw network exceptions.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+        transport_error: Network or transport exception raised by the fake client.
+    """
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    connection.refresh_token = "refresh"
+    connection.token_type = "Bearer"
+    connection.access_token = "access"
+    connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+    with pytest.raises(errors.CarrierApiConnectionError) as error:
+        await connection.authed_query(
+            operation_name="getUser",
+            query=cast("GraphQLRequest", object()),
+            variable_values={},
+        )
+
+    assert error.value.__cause__ is transport_error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+async def test_authed_query_maps_auth_transport_errors_to_auth_error(
+    monkeypatch: pytest.MonkeyPatch,
+    status: int,
+) -> None:
+    """Raise auth errors when GraphQL transport reports auth HTTP statuses.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+        status: HTTP status raised by the fake GraphQL transport.
+    """
+    transport_error = TransportServerError("unauthorized", code=status)
+
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    connection.refresh_token = "refresh"
+    connection.token_type = "Bearer"
+    connection.access_token = "access"
+    connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+    with pytest.raises(errors.CarrierApiAuthError) as error:
+        await connection.authed_query(
+            operation_name="getUser",
+            query=cast("GraphQLRequest", object()),
+            variable_values={},
+        )
+
+    assert error.value.__cause__ is transport_error
 
 
 @pytest.mark.asyncio
@@ -334,6 +909,47 @@ async def test_query_helpers_send_expected_operation_and_variables(
         ("getInfinitySystems", {"userName": "user@example.com"}),
         ("getInfinityEnergy", {"serial": "SERIAL"}),
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "transport_error"),
+    [
+        ("get_user_info", TimeoutError("get user timed out")),
+        ("get_user_info", OSError("get user socket failed")),
+        ("load_data", TimeoutError("load data timed out")),
+        ("load_data", OSError("load data socket failed")),
+    ],
+)
+async def test_public_query_helpers_preserve_connection_error_normalization(
+    monkeypatch: pytest.MonkeyPatch,
+    method_name: str,
+    transport_error: TimeoutError | OSError,
+) -> None:
+    """Keep public query helpers from leaking raw network exceptions.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+        method_name: Public helper method called by API consumers.
+        transport_error: Network exception raised by the fake client.
+    """
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    connection.refresh_token = "refresh"
+    connection.token_type = "Bearer"
+    connection.access_token = "access"
+    connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+    with pytest.raises(errors.CarrierApiConnectionError) as error:
+        await getattr(connection, method_name)()
+
+    assert error.value.__cause__ is transport_error
 
 
 @pytest.mark.asyncio
