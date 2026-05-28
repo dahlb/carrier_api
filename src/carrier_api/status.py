@@ -19,13 +19,15 @@ class StatusUnit:
             status_unit_json: Raw ``idu`` or ``odu`` object from the Carrier
                 status response.
         """
-        self.type: str = safely_get_json_value(status_unit_json, "type")
-        self.operational_status: str = safely_get_json_value(status_unit_json, "opstat")
+        self.type: str | None = safely_get_json_value(status_unit_json, "type")
+        self.operational_status: str | None = safely_get_json_value(status_unit_json, "opstat")
         self.airflow_cfm: int | None = safely_get_json_value(status_unit_json, "cfm", int)
         if self.airflow_cfm is None:
             self.airflow_cfm = safely_get_json_value(status_unit_json, "iducfm", int)
-        self.static_pressure: float = safely_get_json_value(status_unit_json, "statpress", float)
-        self.blower_rpm: int = safely_get_json_value(status_unit_json, "blwrpm", int)
+        self.static_pressure: float | None = safely_get_json_value(
+            status_unit_json, "statpress", float
+        )
+        self.blower_rpm: int | None = safely_get_json_value(status_unit_json, "blwrpm", int)
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of unit runtime details.

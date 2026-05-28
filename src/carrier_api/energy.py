@@ -219,8 +219,8 @@ class Energy:
             raw: Raw ``infinityEnergy`` object returned by the Carrier GraphQL API.
         """
         self.raw = raw
-        self.seer: float = safely_get_json_value(self.raw, "energyConfig.seer", float)
-        self.hspf: float = safely_get_json_value(self.raw, "energyConfig.hspf", float)
+        self.seer = safely_get_json_value(self.raw, "energyConfig.seer", float)
+        self.hspf = safely_get_json_value(self.raw, "energyConfig.hspf", float)
         for metric in _ENERGY_METRICS:
             setattr(self, metric.value, _energy_config_metric_enabled(self.raw, metric))
         self.periods = []
