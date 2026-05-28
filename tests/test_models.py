@@ -6,7 +6,16 @@ from typing import Any
 
 import pytest
 
-from carrier_api import Config, Energy, Profile, Status, System
+from carrier_api import (
+    ENERGY_USAGE_METRIC_LABELS,
+    Config,
+    Energy,
+    EnergyPeriod,
+    EnergyUsageMetric,
+    Profile,
+    Status,
+    System,
+)
 from carrier_api.config import ConfigZone, ConfigZoneActivity, active_schedule_periods
 from carrier_api.const import ActivityTypes, FanModes, SystemModes
 from carrier_api.status import StatusZone
@@ -69,6 +78,148 @@ def test_energy_as_dict_current_year_and_missing_year(
     assert str(current_year) == str(current_year.as_dict())
 
 
+def test_energy_period_helpers_return_sensor_measurements(
+    energy_response: dict[str, Any],
+) -> None:
+    """Look up sensor-facing energy values without raw payload access.
+
+    Args:
+        energy_response: Parsed energy fixture.
+    """
+    energy = Energy(energy_response["infinityEnergy"])
+
+    daily = energy.measurement_for_period(EnergyPeriod.DAY_1)
+    current_day = energy.current_day_measurements()
+    monthly = energy.current_month_measurements()
+    yearly = energy.current_year_measurements()
+
+    assert daily is not None
+    assert current_day is not None
+    assert daily.as_dict() == current_day.as_dict()
+    assert monthly is not None
+    assert yearly is not None
+    assert daily.value_for_metric(EnergyUsageMetric.GAS) == 397
+    assert isinstance(daily.value_for_metric(EnergyUsageMetric.GAS), int)
+    assert isinstance(daily.as_dict()["gas"], int)
+    assert monthly.value_for_metric(EnergyUsageMetric.GAS) == 11012
+    assert yearly.value_for_metric(EnergyUsageMetric.GAS) == 25905
+    assert energy.value_for_period_metric(EnergyPeriod.DAY_1, EnergyUsageMetric.GAS) == 397
+    assert energy.value_for_period_metric(EnergyPeriod.MONTH_1, "gas") == 11012
+    assert energy.value_for_period_metric(EnergyPeriod.YEAR_1, "hp_heat") == 0
+    assert energy.value_for_period_metric("missing", "gas") is None
+    assert energy.value_for_period_metric(EnergyPeriod.YEAR_1, "unknown") is None
+    assert yearly.value_for_metric("hp_heat") == 0
+    assert yearly.value_for_metric("unknown") is None
+    assert energy.measurement_for_period("missing") is None
+
+
+def test_energy_measurements_preserve_fractional_usage_values(
+    energy_response: dict[str, Any],
+) -> None:
+    """Preserve fractional Carrier energy readings for sensor consumers.
+
+    Args:
+        energy_response: Parsed energy fixture.
+    """
+    energy_payload = deepcopy(energy_response["infinityEnergy"])
+    energy_payload["energyPeriods"][0]["coolingKwh"] = 0.9
+    energy_payload["energyPeriods"][0]["gasKwh"] = 397.5
+
+    energy = Energy(energy_payload)
+    current_day = energy.current_day_measurements()
+
+    assert current_day is not None
+    assert current_day.cooling == 0.9
+    assert isinstance(current_day.cooling, float)
+    assert current_day.value_for_metric(EnergyUsageMetric.COOLING) == 0.9
+    assert energy.value_for_period_metric(EnergyPeriod.DAY_1, EnergyUsageMetric.GAS) == 397.5
+    assert current_day.as_dict()["cooling"] == 0.9
+
+
+@pytest.mark.parametrize("invalid_value", ["nan", "inf", "1e999"])
+def test_energy_measurements_reject_non_finite_usage_values(
+    energy_response: dict[str, Any],
+    invalid_value: str,
+) -> None:
+    """Reject non-finite energy readings instead of leaking invalid floats.
+
+    Args:
+        energy_response: Parsed energy fixture.
+        invalid_value: Invalid energy value to parse.
+    """
+    energy_payload = deepcopy(energy_response["infinityEnergy"])
+    energy_payload["energyPeriods"][0]["gasKwh"] = invalid_value
+
+    energy = Energy(energy_payload)
+    current_day = energy.current_day_measurements()
+
+    assert current_day is not None
+    assert current_day.gas is None
+    assert current_day.value_for_metric(EnergyUsageMetric.GAS) is None
+    assert current_day.as_dict()["gas"] is None
+
+
+def test_energy_measurement_missing_metric_attribute_returns_none(
+    energy_response: dict[str, Any],
+) -> None:
+    """Return None when a normalized metric attribute is unavailable.
+
+    Args:
+        energy_response: Parsed energy fixture.
+    """
+    energy = Energy(energy_response["infinityEnergy"])
+    current_day = energy.current_day_measurements()
+
+    assert current_day is not None
+    del current_day.gas
+
+    assert current_day.value_for_metric(EnergyUsageMetric.GAS) is None
+
+
+def test_energy_enabled_usage_metrics_use_api_metric_vocabulary(
+    energy_response: dict[str, Any],
+) -> None:
+    """Expose enabled usage metrics without caller-owned raw field maps.
+
+    Args:
+        energy_response: Parsed energy fixture.
+    """
+    energy = Energy(energy_response["infinityEnergy"])
+
+    assert energy.enabled_usage_metrics() == (
+        EnergyUsageMetric.COOLING,
+        EnergyUsageMetric.GAS,
+    )
+    assert energy.is_usage_metric_enabled(EnergyUsageMetric.COOLING) is True
+    assert energy.is_usage_metric_enabled("gas") is True
+    assert energy.is_usage_metric_enabled(EnergyUsageMetric.ELECTRIC_HEAT) is False
+    assert energy.is_usage_metric_enabled("unknown") is False
+
+
+def test_energy_usage_metrics_expose_display_labels() -> None:
+    """Expose human-readable labels for sensor names."""
+    assert ENERGY_USAGE_METRIC_LABELS == {
+        EnergyUsageMetric.COOLING: "Cooling",
+        EnergyUsageMetric.ELECTRIC_HEAT: "Electric Heat",
+        EnergyUsageMetric.FAN_GAS: "Fan Gas",
+        EnergyUsageMetric.FAN: "Fan",
+        EnergyUsageMetric.GAS: "Gas",
+        EnergyUsageMetric.HP_HEAT: "Heat Pump Heat",
+        EnergyUsageMetric.LOOP_PUMP: "Loop Pump",
+        EnergyUsageMetric.REHEAT: "Reheat",
+    }
+    assert {metric.value: metric.label for metric in EnergyUsageMetric} == {
+        "cooling": "Cooling",
+        "hp_heat": "Heat Pump Heat",
+        "fan": "Fan",
+        "electric_heat": "Electric Heat",
+        "reheat": "Reheat",
+        "fan_gas": "Fan Gas",
+        "gas": "Gas",
+        "loop_pump": "Loop Pump",
+    }
+
+
 def test_status_modes_zone_conditioning_and_serialization(
     system_response: dict[str, Any],
 ) -> None:
@@ -92,6 +243,36 @@ def test_status_modes_zone_conditioning_and_serialization(
     assert status.zones[0].current_status_activity_type == ActivityTypes.HOME
     assert status.as_dict()["time_stamp"] == datetime(2025, 3, 3, 13, 42, 34, 328000, UTC)
     assert status.as_dict()["uv_lamp_level"] == 100
+    assert status.outdoor_unit is not None
+    assert status.outdoor_unit.as_dict() == {
+        "type": "ac2stgeverest",
+        "operational_status": "off",
+    }
+    idu_without_airflow = {key: value for key, value in raw_status["idu"].items() if key != "cfm"}
+    odu_with_airflow = Status(
+        {
+            **raw_status,
+            "idu": idu_without_airflow,
+            "odu": {**raw_status["odu"], "iducfm": "482"},
+        }
+    )
+    assert odu_with_airflow.outdoor_unit is not None
+    assert odu_with_airflow.outdoor_unit.airflow_cfm is None
+    assert "airflow_cfm" not in odu_with_airflow.outdoor_unit.as_dict()
+    assert odu_with_airflow.indoor_unit is not None
+    assert odu_with_airflow.indoor_unit.airflow_cfm == 482
+    assert odu_with_airflow.indoor_unit.as_dict()["airflow_cfm"] == 482
+    assert odu_with_airflow.airflow_cfm == 482
+    assert odu_with_airflow.as_dict()["airflow_cfm"] == 482
+    assert status.indoor_unit is not None
+    indoor_unit_data = status.indoor_unit.as_dict()
+    assert indoor_unit_data == {
+        "type": "furnace2stg",
+        "operational_status": "low",
+        "airflow_cfm": 1239,
+        "static_pressure": pytest.approx(1.399999976158142),
+        "blower_rpm": 1224,
+    }
     assert repr(status.zones[0]) == str(status.zones[0].as_dict())
 
     cool_zone = StatusZone({**raw_status["zones"][0], "zoneconditioning": "active_cool"})

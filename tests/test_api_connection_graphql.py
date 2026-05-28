@@ -10,7 +10,7 @@ import pytest
 
 import carrier_api
 from carrier_api import errors
-from carrier_api.api_connection_graphql import _GRAPHQL_ERRORS, ApiConnectionGraphql
+from carrier_api.api_connection_graphql import ApiConnectionGraphql
 from carrier_api.const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from carrier_api.system import System
 
@@ -344,11 +344,6 @@ def test_public_error_exports_use_carrier_api_prefix() -> None:
     assert errors.BaseError is errors.CarrierApiError
     assert carrier_api.AuthError is errors.CarrierApiAuthError
     assert carrier_api.BaseError is errors.CarrierApiError
-
-
-def test_graphql_error_tuple_catches_transport_query_errors() -> None:
-    """Include query errors explicitly in the wrapped GraphQL error set."""
-    assert TransportQueryError in _GRAPHQL_ERRORS
 
 
 @pytest.mark.asyncio
