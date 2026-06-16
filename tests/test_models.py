@@ -553,8 +553,11 @@ def test_system_hvac_capabilities_ignore_profile_equipment_strings(
     [
         ("multistghp", {"heat": True, "cool": True, "fan": False}),
         ("MultiStgHp ", {"heat": True, "cool": True, "fan": False}),
+        ("multistgac", {"heat": False, "cool": True, "fan": False}),
         ("ac2stg", {"heat": False, "cool": True, "fan": False}),
         ("AC2STG", {"heat": False, "cool": True, "fan": False}),
+        ("varcaphp", {"heat": True, "cool": True, "fan": False}),
+        ("ac1stg", {"heat": False, "cool": True, "fan": False}),
         ("varcapac", {"heat": False, "cool": True, "fan": False}),
     ],
 )
