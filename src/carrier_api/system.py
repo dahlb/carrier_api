@@ -13,6 +13,11 @@ _LOGGER = getLogger(__name__)
 HEAT_CAPABILITY_FIELDS = ("electric_heat", "gas", "hp_heat", "loop_pump", "reheat")
 COOL_CAPABILITY_FIELDS = ("cooling", "loop_pump")
 FAN_CAPABILITY_FIELDS = ("fan", "fan_gas")
+HEAT_OUTDOOR_UNIT_TYPES = ("multistghp",)
+COOL_OUTDOOR_UNIT_TYPES = ("multistghp", "varcapac", "ac2stg")
+HEAT_INDOOR_UNIT_TYPES = ("furnace",)
+FAN_INDOOR_UNIT_TYPES = ("fancoil",)
+COOL_INDOOR_UNIT_TYPES = ()
 
 
 class System:
@@ -51,7 +56,11 @@ class System:
             ``True`` when any parsed heating energy capability is displayable
             and enabled.
         """
-        return self._supports_any_energy_capability(HEAT_CAPABILITY_FIELDS)
+        return self._supports_capability(
+            HEAT_CAPABILITY_FIELDS,
+            HEAT_OUTDOOR_UNIT_TYPES,
+            HEAT_INDOOR_UNIT_TYPES,
+        )
 
     def supports_cool(self) -> bool:
         """Return whether Carrier energy data reports cooling support.
@@ -66,7 +75,11 @@ class System:
             ``True`` when any parsed cooling energy capability is displayable
             and enabled.
         """
-        return self._supports_any_energy_capability(COOL_CAPABILITY_FIELDS)
+        return self._supports_capability(
+            COOL_CAPABILITY_FIELDS,
+            COOL_OUTDOOR_UNIT_TYPES,
+            COOL_INDOOR_UNIT_TYPES,
+        )
 
     def supports_fan(self) -> bool:
         """Return whether available Carrier data suggests fan support.
@@ -81,7 +94,11 @@ class System:
         """
         if self.config.fan_enabled is not None:
             return self.config.fan_enabled
-        return self._supports_any_energy_capability(FAN_CAPABILITY_FIELDS)
+        return self._supports_capability(
+            FAN_CAPABILITY_FIELDS,
+            (),
+            FAN_INDOOR_UNIT_TYPES,
+        )
 
     def supported_hvac_capabilities(self) -> dict[str, bool]:
         """Return best-effort heat, cool, and fan support signals.
@@ -97,6 +114,29 @@ class System:
             "fan": self.supports_fan(),
         }
 
+    def _supports_capability(
+        self,
+        capability_fields: tuple[str, ...],
+        outdoor_unit_types: tuple[str, ...],
+        indoor_unit_types: tuple[str, ...],
+    ) -> bool:
+        """Return whether an energy flag or known equipment type implies support.
+
+        Args:
+            capability_fields: Energy model attribute names to inspect first.
+            outdoor_unit_types: Known outdoor unit types that imply support when
+                energy config omits the capability.
+            indoor_unit_types: Known indoor unit types that imply support when
+                energy config omits the capability.
+
+        Returns:
+            ``True`` when Carrier reports the capability through energy flags or
+            through a known indoor or outdoor unit type.
+        """
+        if self._supports_any_energy_capability(capability_fields):
+            return True
+        return self._supports_known_unit_type(outdoor_unit_types, indoor_unit_types)
+
     def _supports_any_energy_capability(self, capability_fields: tuple[str, ...]) -> bool:
         """Return whether any named energy capability is enabled.
 
@@ -109,6 +149,27 @@ class System:
         return any(
             getattr(self.energy, capability_field, False) is True
             for capability_field in capability_fields
+        )
+
+    def _supports_known_unit_type(
+        self,
+        outdoor_unit_types: tuple[str, ...],
+        indoor_unit_types: tuple[str, ...],
+    ) -> bool:
+        """Return whether a known unit type implies capability support.
+
+        Args:
+            outdoor_unit_types: Outdoor unit types that should be treated as
+                supporting the capability.
+            indoor_unit_types: Indoor unit types that should be treated as
+                supporting the capability.
+
+        Returns:
+            ``True`` when the profile reports a known indoor or outdoor unit type.
+        """
+        return (
+            self.profile.outdoor_unit_type in outdoor_unit_types
+            or self.profile.indoor_unit_type in indoor_unit_types
         )
 
     def as_dict(self) -> dict[str, Any]:
