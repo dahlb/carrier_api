@@ -48,9 +48,10 @@ class System:
 
         Carrier's captured profile fields do not expose typed HVAC capability
         enums, and the raw ``idutype``/``odutype`` values are free-form strings
-        in the GraphQL schema. This helper intentionally uses parsed
-        ``energyConfig`` flags only, so treat it as a best-effort reported
-        support signal rather than an authoritative equipment/control contract.
+        in the GraphQL schema. This helper uses parsed ``energyConfig`` flags
+        first, then known equipment-type fallbacks from the captured profile, so
+        treat it as a best-effort reported support signal rather than an
+        authoritative equipment/control contract.
 
         Returns:
             ``True`` when any parsed heating energy capability is displayable
@@ -67,9 +68,10 @@ class System:
 
         Carrier's captured profile fields do not expose typed HVAC capability
         enums, and the raw ``idutype``/``odutype`` values are free-form strings
-        in the GraphQL schema. This helper intentionally uses parsed
-        ``energyConfig`` flags only, so treat it as a best-effort reported
-        support signal rather than an authoritative equipment/control contract.
+        in the GraphQL schema. This helper uses parsed ``energyConfig`` flags
+        first, then known equipment-type fallbacks from the captured profile, so
+        treat it as a best-effort reported support signal rather than an
+        authoritative equipment/control contract.
 
         Returns:
             ``True`` when any parsed cooling energy capability is displayable
@@ -167,10 +169,24 @@ class System:
         Returns:
             ``True`` when the profile reports a known indoor or outdoor unit type.
         """
-        return (
-            self.profile.outdoor_unit_type in outdoor_unit_types
-            or self.profile.indoor_unit_type in indoor_unit_types
-        )
+        return self._normalize_unit_type(self.profile.outdoor_unit_type) in {
+            self._normalize_unit_type(outdoor_unit_type) for outdoor_unit_type in outdoor_unit_types
+        } or self._normalize_unit_type(self.profile.indoor_unit_type) in {
+            self._normalize_unit_type(indoor_unit_type) for indoor_unit_type in indoor_unit_types
+        }
+
+    def _normalize_unit_type(self, unit_type: str | None) -> str | None:
+        """Normalize a Carrier unit type for comparison.
+
+        Args:
+            unit_type: Raw Carrier unit type string.
+
+        Returns:
+            Lowercase, trimmed unit type, or ``None`` when the input is absent.
+        """
+        if unit_type is None:
+            return None
+        return unit_type.strip().lower()
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of the aggregate.

@@ -552,7 +552,9 @@ def test_system_hvac_capabilities_ignore_profile_equipment_strings(
     ("outdoor_unit_type", "expected_capabilities"),
     [
         ("multistghp", {"heat": True, "cool": True, "fan": False}),
+        ("MultiStgHp ", {"heat": True, "cool": True, "fan": False}),
         ("ac2stg", {"heat": False, "cool": True, "fan": False}),
+        ("AC2STG", {"heat": False, "cool": True, "fan": False}),
         ("varcapac", {"heat": False, "cool": True, "fan": False}),
     ],
 )
@@ -593,7 +595,10 @@ def test_system_hvac_capabilities_use_known_outdoor_unit_types(
     ("indoor_unit_type", "fan_enabled", "expected_capabilities"),
     [
         ("furnace", False, {"heat": True, "cool": False, "fan": False}),
+        ("Furnace", False, {"heat": True, "cool": False, "fan": False}),
+        ("furnace ", False, {"heat": True, "cool": False, "fan": False}),
         ("fancoil", None, {"heat": False, "cool": False, "fan": True}),
+        ("Fancoil ", None, {"heat": False, "cool": False, "fan": True}),
     ],
 )
 def test_system_hvac_capabilities_use_known_indoor_unit_types(
