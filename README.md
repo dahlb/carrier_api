@@ -12,8 +12,7 @@
 
 Async Python client for Carrier Infinity and Bryant Evolution HVAC systems.
 
-This package wraps the Carrier Infinity GraphQL API, exposes typed model objects for system profile, status, configuration, and energy data, and includes helper methods for common thermostat updates. It is intended for integrations and local automation code that need a lightweight API client rather than a full
-application.
+This package wraps the Carrier Infinity GraphQL API, exposes typed model objects for system profile, status, configuration, and energy data, and includes helper methods for common thermostat updates. It is intended for integrations and local automation code that need a lightweight API client rather than a full application.
 
 The client is unofficial and depends on Carrier's private web and mobile API behavior. Carrier can change that API without notice.
 
@@ -91,6 +90,8 @@ Model objects provide `as_dict()` for structured serialization. Their string and
 - `supports_cool()`
 - `supports_fan()`
 - `supported_hvac_capabilities()`
+
+These helpers prefer Carrier's energy configuration flags, then use known equipment hints from Carrier's indoor and outdoor unit types to supplement.
 
 For zone-level profile resolution, call `ConfigZone.current_status_activity(status_zone)` with matching zones from the same system. This uses Carrier's reported current activity type from live status data. Use `ConfigZone.current_scheduled_activity()` when you want the activity implied by schedule and hold configuration instead.
 
@@ -216,8 +217,7 @@ The underlying commands are:
 ./.venv/bin/mypy .
 ```
 
-Add or update deterministic pytest coverage for behavior changes. Fixture data for GraphQL and websocket responses lives under `tests/graphql` and
-`tests/messages`.
+Add or update deterministic pytest coverage for behavior changes. Fixture data for GraphQL and websocket responses lives under `tests/graphql` and `tests/messages`.
 
 ## Updating the Captured Schema
 

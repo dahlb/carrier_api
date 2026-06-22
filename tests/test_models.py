@@ -518,16 +518,16 @@ def test_system_hvac_capabilities_ignore_profile_equipment_strings(
     system_response: dict[str, Any],
     energy_response: dict[str, Any],
 ) -> None:
-    """Avoid reporting heat/cool support from free-form profile strings.
+    """Avoid reporting support from unsupported profile strings.
 
     Args:
         system_response: Parsed systems fixture.
         energy_response: Parsed energy fixture.
     """
     raw_system = deepcopy(system_response["infinitySystems"][0])
-    raw_system["profile"]["idutype"] = "furnace"
+    raw_system["profile"]["idutype"] = "unknown"
     raw_system["profile"]["idusource"] = "gas"
-    raw_system["profile"]["odutype"] = "ac2stg"
+    raw_system["profile"]["odutype"] = "unknown"
     raw_system["config"]["cfgfan"] = "off"
     raw_energy = deepcopy(energy_response["infinityEnergy"])
     for energy_config in raw_energy["energyConfig"].values():
@@ -546,6 +546,97 @@ def test_system_hvac_capabilities_ignore_profile_equipment_strings(
         "cool": False,
         "fan": False,
     }
+
+
+@pytest.mark.parametrize(
+    ("outdoor_unit_type", "expected_capabilities"),
+    [
+        ("multistghp", {"heat": True, "cool": True, "fan": False}),
+        ("MultiStgHp ", {"heat": True, "cool": True, "fan": False}),
+        ("multistgac", {"heat": False, "cool": True, "fan": False}),
+        ("ac2stg", {"heat": False, "cool": True, "fan": False}),
+        ("AC2STG", {"heat": False, "cool": True, "fan": False}),
+        ("varcaphp", {"heat": True, "cool": True, "fan": False}),
+        ("ac1stg", {"heat": False, "cool": True, "fan": False}),
+        ("varcapac", {"heat": False, "cool": True, "fan": False}),
+    ],
+)
+def test_system_hvac_capabilities_use_known_outdoor_unit_types(
+    system_response: dict[str, Any],
+    energy_response: dict[str, Any],
+    outdoor_unit_type: str,
+    expected_capabilities: dict[str, bool],
+) -> None:
+    """Supplement energy flags with known outdoor unit capability hints.
+
+    Args:
+        system_response: Parsed systems fixture.
+        energy_response: Parsed energy fixture.
+        outdoor_unit_type: Outdoor unit type to test.
+        expected_capabilities: Expected capability map for the equipment type.
+    """
+    raw_system = deepcopy(system_response["infinitySystems"][0])
+    raw_system["profile"]["idutype"] = "unknown"
+    raw_system["profile"]["odutype"] = outdoor_unit_type
+    raw_system["config"]["cfgfan"] = "off"
+    raw_energy = deepcopy(energy_response["infinityEnergy"])
+    for energy_config in raw_energy["energyConfig"].values():
+        if isinstance(energy_config, dict):
+            energy_config["display"] = False
+            energy_config["enabled"] = False
+    system = System(
+        Profile(raw_system["profile"]),
+        Status(raw_system["status"]),
+        Config(raw_system["config"]),
+        Energy(raw_energy),
+    )
+
+    assert system.supported_hvac_capabilities() == expected_capabilities
+
+
+@pytest.mark.parametrize(
+    ("indoor_unit_type", "fan_enabled", "expected_capabilities"),
+    [
+        ("furnace", False, {"heat": True, "cool": False, "fan": False}),
+        ("Furnace", False, {"heat": True, "cool": False, "fan": False}),
+        ("furnace ", False, {"heat": True, "cool": False, "fan": False}),
+        ("fancoil", None, {"heat": False, "cool": False, "fan": True}),
+        ("Fancoil ", None, {"heat": False, "cool": False, "fan": True}),
+    ],
+)
+def test_system_hvac_capabilities_use_known_indoor_unit_types(
+    system_response: dict[str, Any],
+    energy_response: dict[str, Any],
+    indoor_unit_type: str,
+    fan_enabled: bool | None,
+    expected_capabilities: dict[str, bool],
+) -> None:
+    """Supplement energy flags with known indoor unit capability hints.
+
+    Args:
+        system_response: Parsed systems fixture.
+        energy_response: Parsed energy fixture.
+        indoor_unit_type: Indoor unit type to test.
+        fan_enabled: Optional config fan flag override used to exercise fallback.
+        expected_capabilities: Expected capability map for the equipment type.
+    """
+    raw_system = deepcopy(system_response["infinitySystems"][0])
+    raw_system["profile"]["idutype"] = indoor_unit_type
+    raw_system["profile"]["odutype"] = "unknown"
+    raw_system["config"]["cfgfan"] = fan_enabled
+    raw_energy = deepcopy(energy_response["infinityEnergy"])
+    for energy_config in raw_energy["energyConfig"].values():
+        if isinstance(energy_config, dict):
+            energy_config["display"] = False
+            energy_config["enabled"] = False
+    system = System(
+        Profile(raw_system["profile"]),
+        Status(raw_system["status"]),
+        Config(raw_system["config"]),
+        Energy(raw_energy),
+    )
+
+    assert system.supported_hvac_capabilities() == expected_capabilities
 
 
 def test_system_hvac_capabilities_do_not_let_activity_fan_override_cfgfan_off(
