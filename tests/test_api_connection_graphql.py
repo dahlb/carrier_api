@@ -1203,3 +1203,75 @@ async def test_update_methods_send_reconcile_when_websocket_exists() -> None:
         "variables": zone_config_variables,
     }
     assert websocket.calls == 3
+
+
+@pytest.mark.asyncio
+async def test_get_entry_level_systems_sends_username(connection: SpyConnection) -> None:
+    """Query entry-level systems by account username."""
+    await connection.get_entry_level_systems()
+    assert connection.authed_calls[-1] == (
+        "getEntryLevelSystems",
+        {"username": connection.username},
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_entry_level_zone_builds_input(connection: SpyConnection) -> None:
+    """Send only provided fields, pairing cool and heat set points."""
+    await connection.update_entry_level_zone(
+        "SERIALXXX",
+        0,
+        mode="cool",
+        cool_set_point=74,
+        heat_set_point=62,
+    )
+    operation, variables = connection.authed_calls[-1]
+    assert operation == "updateEntryLevelZone"
+    assert variables == {
+        "input": {
+            "serial": "SERIALXXX",
+            "index": 0,
+            "mode": "cool",
+            "clsp": {"current": 74},
+            "htsp": {"current": 62},
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_hold_entry_level_zone_disables_schedule(connection: SpyConnection) -> None:
+    """Holding a zone disables its schedule and applies the set point."""
+    await connection.hold_entry_level_zone("SERIALXXX", cool_set_point=74)
+    _, variables = connection.authed_calls[-1]
+    assert variables["input"]["schedule_enabled"] is False
+    assert variables["input"]["clsp"] == {"current": 74}
+
+
+@pytest.mark.asyncio
+async def test_resume_entry_level_schedule_enables_schedule(connection: SpyConnection) -> None:
+    """Resuming a zone re-enables its schedule."""
+    await connection.resume_entry_level_schedule("SERIALXXX")
+    _, variables = connection.authed_calls[-1]
+    assert variables["input"] == {
+        "serial": "SERIALXXX",
+        "index": 0,
+        "schedule_enabled": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_load_entry_level_data_parses_systems(
+    connection: SpyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Build EntryLevelSystem models from the query response."""
+
+    async def fake_get_entry_level_systems() -> dict[str, Any]:
+        return {
+            "entryLevelSystems": [{"serial": "SERIALXXX", "zones": [{"index": 0, "mode": "cool"}]}]
+        }
+
+    monkeypatch.setattr(connection, "get_entry_level_systems", fake_get_entry_level_systems)
+    systems = await connection.load_entry_level_data()
+    assert len(systems) == 1
+    assert systems[0].serial == "SERIALXXX"
+    assert systems[0].zones[0].mode == "cool"

@@ -18,6 +18,7 @@ from .api_websocket import ApiWebsocket
 from .config import Config
 from .const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from .energy import Energy
+from .entry_level import EntryLevelSystem
 from .errors import (
     CarrierApiAuthError,
     CarrierApiConnectionError,
@@ -565,6 +566,165 @@ class ApiConnectionGraphql:
             energy = Energy(raw=energy_response["infinityEnergy"])
             systems.append(System(profile=profile, status=status, config=config, energy=energy))
         return systems
+
+    async def get_entry_level_systems(self) -> dict[str, Any]:
+        """Fetch entry-level (Smart Thermostat) systems for the current user.
+
+        These are the non-Infinity Carrier Smart Thermostat devices, exposed by
+        a separate query from ``infinitySystems``.
+
+        Returns:
+            The decoded ``getEntryLevelSystems`` GraphQL response data.
+        """
+        operation_name = "getEntryLevelSystems"
+        query = gql(
+            """
+            query getEntryLevelSystems($username: String!) {
+              entryLevelSystems(username: $username) {
+                serial
+                name
+                location_id
+                model
+                firmware
+                temp_unit_format
+                connection {
+                  isConnected
+                  deviceId
+                }
+                zones {
+                  index
+                  mode
+                  rt
+                  rh
+                  clsp { current min }
+                  htsp { current max }
+                  fan_mode
+                  schedule_enabled
+                  hold_end_time
+                  hold_countdown
+                  stage_status
+                  outside_temp
+                }
+              }
+            }
+            """
+        )
+        variable_values = {"username": self.username}
+        return await self.authed_query(
+            operation_name=operation_name, query=query, variable_values=variable_values
+        )
+
+    async def load_entry_level_data(self) -> list[EntryLevelSystem]:
+        """Load all entry-level systems for the account.
+
+        Returns:
+            A list of entry-level system models for the account.
+        """
+        response = await self.get_entry_level_systems()
+        return [
+            EntryLevelSystem(raw=system_response)
+            for system_response in (response.get("entryLevelSystems") or [])
+        ]
+
+    async def update_entry_level_zone(
+        self,
+        serial: str,
+        index: int = 0,
+        mode: str | None = None,
+        cool_set_point: float | None = None,
+        heat_set_point: float | None = None,
+        schedule_enabled: bool | None = None,
+        hold_end_time: int | None = None,
+        fan_mode: str | None = None,
+    ) -> dict[str, Any]:
+        """Update an entry-level zone's mode, set points, hold, or fan.
+
+        Only the provided fields are sent. Carrier expects the cool and heat set
+        points together, so pass both when changing a set point.
+
+        Args:
+            serial: Serial number of the entry-level system to update.
+            index: Zone index to update (entry-level systems are single-zone).
+            mode: Requested HVAC mode (``cool``/``heat``/``off``/``auto``).
+            cool_set_point: Requested cool set point.
+            heat_set_point: Requested heat set point.
+            schedule_enabled: ``False`` holds the zone, ``True`` resumes the
+                programmed schedule.
+            hold_end_time: Optional Carrier hold-until value.
+            fan_mode: Requested fan mode.
+
+        Returns:
+            The decoded mutation response.
+        """
+        query = gql(
+            """
+            mutation updateEntryLevelZone($input: EntryLevelZoneInput!) {
+              updateEntryLevelZone(input: $input) {
+                success
+              }
+            }
+            """
+        )
+        zone_input: dict[str, Any] = {"serial": serial, "index": index}
+        if mode is not None:
+            zone_input["mode"] = mode
+        if cool_set_point is not None:
+            zone_input["clsp"] = {"current": cool_set_point}
+        if heat_set_point is not None:
+            zone_input["htsp"] = {"current": heat_set_point}
+        if schedule_enabled is not None:
+            zone_input["schedule_enabled"] = schedule_enabled
+        if hold_end_time is not None:
+            zone_input["hold_end_time"] = hold_end_time
+        if fan_mode is not None:
+            zone_input["fan_mode"] = fan_mode
+        _LOGGER.debug("updateEntryLevelZone: %s", zone_input)
+        return await self.authed_query(
+            operation_name="updateEntryLevelZone",
+            query=query,
+            variable_values={"input": zone_input},
+        )
+
+    async def hold_entry_level_zone(
+        self,
+        serial: str,
+        index: int = 0,
+        cool_set_point: float | None = None,
+        heat_set_point: float | None = None,
+        hold_end_time: int | None = None,
+    ) -> dict[str, Any]:
+        """Hold an entry-level zone off its schedule at the given set points.
+
+        Args:
+            serial: Serial number of the entry-level system to update.
+            index: Zone index to update.
+            cool_set_point: Optional cool set point to apply with the hold.
+            heat_set_point: Optional heat set point to apply with the hold.
+            hold_end_time: Optional Carrier hold-until value.
+
+        Returns:
+            The decoded mutation response.
+        """
+        return await self.update_entry_level_zone(
+            serial,
+            index,
+            cool_set_point=cool_set_point,
+            heat_set_point=heat_set_point,
+            schedule_enabled=False,
+            hold_end_time=hold_end_time,
+        )
+
+    async def resume_entry_level_schedule(self, serial: str, index: int = 0) -> dict[str, Any]:
+        """Clear an entry-level zone hold and resume its programmed schedule.
+
+        Args:
+            serial: Serial number of the entry-level system to update.
+            index: Zone index to update.
+
+        Returns:
+            The decoded mutation response.
+        """
+        return await self.update_entry_level_zone(serial, index, schedule_enabled=True)
 
     async def _update_infinity_config(self, variables: dict[str, Any]) -> dict[str, Any]:
         """Run the Carrier system-level configuration mutation.

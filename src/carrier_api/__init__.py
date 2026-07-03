@@ -12,6 +12,7 @@ from .energy import (
     EnergyPeriod,
     EnergyUsageMetric,
 )
+from .entry_level import EntryLevelSystem, EntryLevelZone
 from .errors import (
     AuthError,
     BaseError,
@@ -46,6 +47,8 @@ __all__ = [
     "EnergyMeasurement",
     "EnergyPeriod",
     "EnergyUsageMetric",
+    "EntryLevelSystem",
+    "EntryLevelZone",
     "FanModes",
     "Profile",
     "Status",
