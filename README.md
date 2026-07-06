@@ -15,9 +15,9 @@
 | src/carrier\_api/errors.py                        |       13 |        0 |        0 |        0 |    100% |           |
 | src/carrier\_api/profile.py                       |       35 |        0 |        0 |        0 |    100% |           |
 | src/carrier\_api/status.py                        |      115 |        5 |       24 |        3 |     94% |51, 59, 175, 214-\>216, 218-\>220, 220-\>222, 288, 296 |
-| src/carrier\_api/system.py                        |       34 |        1 |        2 |        0 |     97% |       144 |
+| src/carrier\_api/system.py                        |       49 |        2 |        6 |        1 |     95% |  188, 221 |
 | src/carrier\_api/util.py                          |       27 |        0 |        8 |        0 |    100% |           |
-| **TOTAL**                                         |  **970** |   **77** |  **206** |   **29** | **90%** |           |
+| **TOTAL**                                         |  **985** |   **78** |  **210** |   **30** | **90%** |           |
 
 
 ## Setup coverage badge
