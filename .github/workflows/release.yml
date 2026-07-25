@@ -47,7 +47,7 @@ jobs:
 
       - name: Set up Python
         if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: "pip"
