@@ -55,7 +55,7 @@ jobs:
 
       - name: Build package
         if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
-        uses: hynek/build-and-inspect-python-package@v2.18.0
+        uses: hynek/build-and-inspect-python-package@v3.0.1
 
       - name: Download built package
         if: ${{ steps.semantic_release_info.outputs.new_release_published == 'true' }}
