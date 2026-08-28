@@ -1,0 +1,8 @@
+{
+   "deviceId":"SERIALXXX",
+   "payload":{
+      "deviceId":"SERIALXXX",
+      "messageType":"InfinityStatus",
+      "oat":79
+   }
+}
