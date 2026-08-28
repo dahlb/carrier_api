@@ -10,7 +10,12 @@ from .util import safely_get_json_value
 
 
 class StatusUnit:
-    """Runtime status details for a Carrier indoor or outdoor unit."""
+    """Runtime status details for a Carrier indoor or outdoor unit.
+
+    Outdoor units also report refrigerant and electrical readings. Those arrive
+    in ``diagnostic-device-info`` websocket messages rather than the GraphQL
+    status response, so they are absent until such a message is applied.
+    """
 
     def __init__(self, status_unit_json: dict[str, Any]) -> None:
         """Build unit status details from a Carrier unit status payload.
@@ -26,6 +31,22 @@ class StatusUnit:
             status_unit_json, "statpress", float
         )
         self.blower_rpm: int | None = safely_get_json_value(status_unit_json, "blwrpm", int)
+        self.outdoor_coil_temperature: float | None = safely_get_json_value(
+            status_unit_json, "oducoiltmp", float
+        )
+        self.discharge_temperature: float | None = safely_get_json_value(
+            status_unit_json, "dischargetmp", float
+        )
+        self.suction_pressure: float | None = safely_get_json_value(
+            status_unit_json, "suctpress", float
+        )
+        self.suction_temperature: float | None = safely_get_json_value(
+            status_unit_json, "sucttemp", float
+        )
+        self.suction_superheat: float | None = safely_get_json_value(
+            status_unit_json, "suctsupheat", float
+        )
+        self.line_voltage: int | None = safely_get_json_value(status_unit_json, "linevolt", int)
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of unit runtime details.
@@ -39,6 +60,12 @@ class StatusUnit:
             "airflow_cfm": self.airflow_cfm,
             "static_pressure": self.static_pressure,
             "blower_rpm": self.blower_rpm,
+            "outdoor_coil_temperature": self.outdoor_coil_temperature,
+            "discharge_temperature": self.discharge_temperature,
+            "suction_pressure": self.suction_pressure,
+            "suction_temperature": self.suction_temperature,
+            "suction_superheat": self.suction_superheat,
+            "line_voltage": self.line_voltage,
         }
         return {key: value for key, value in values.items() if value is not None}
 
