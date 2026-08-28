@@ -710,3 +710,91 @@ def test_activity_and_fan_string_representations() -> None:
         "cool_set_point": 76.0,
     }
     assert repr(activity) == str(activity.as_dict())
+
+
+def test_outdoor_unit_maps_diagnostic_refrigerant_and_electrical_readings(
+    system_response: dict[str, Any],
+) -> None:
+    """Map the outdoor unit readings that arrive in diagnostic messages.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    raw_status = system_response["infinitySystems"][0]["status"]
+    status = Status(
+        {
+            **raw_status,
+            "odu": {
+                **raw_status["odu"],
+                "oducoiltmp": 76,
+                "dischargetmp": 140,
+                "suctpress": 193,
+                "sucttemp": 78,
+                "suctsupheat": 4.65234375,
+                "linevolt": 246,
+            },
+        }
+    )
+
+    outdoor_unit = status.outdoor_unit
+    assert outdoor_unit is not None
+    assert outdoor_unit.outdoor_coil_temperature == 76
+    assert outdoor_unit.discharge_temperature == 140
+    assert outdoor_unit.suction_pressure == 193
+    assert outdoor_unit.suction_temperature == 78
+    assert outdoor_unit.suction_superheat == 4.65234375
+    assert outdoor_unit.line_voltage == 246
+    assert outdoor_unit.as_dict() == {
+        "type": "ac2stgeverest",
+        "operational_status": "off",
+        "outdoor_coil_temperature": 76,
+        "discharge_temperature": 140,
+        "suction_pressure": 193,
+        "suction_temperature": 78,
+        "suction_superheat": 4.65234375,
+        "line_voltage": 246,
+    }
+
+
+def test_unit_readings_are_absent_until_a_diagnostic_message_supplies_them(
+    system_response: dict[str, Any],
+) -> None:
+    """Omit the diagnostic readings while the payload does not carry them.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    status = Status(system_response["infinitySystems"][0]["status"])
+
+    outdoor_unit = status.outdoor_unit
+    assert outdoor_unit is not None
+    assert outdoor_unit.suction_pressure is None
+    assert outdoor_unit.line_voltage is None
+    for key in (
+        "outdoor_coil_temperature",
+        "discharge_temperature",
+        "suction_pressure",
+        "suction_temperature",
+        "suction_superheat",
+        "line_voltage",
+    ):
+        assert key not in outdoor_unit.as_dict()
+
+
+def test_unit_readings_are_cast_from_carrier_string_values(
+    system_response: dict[str, Any],
+) -> None:
+    """Cast readings that Carrier reports as strings rather than numbers.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    raw_status = system_response["infinitySystems"][0]["status"]
+    status = Status(
+        {**raw_status, "odu": {**raw_status["odu"], "suctpress": "193", "linevolt": "246"}}
+    )
+
+    outdoor_unit = status.outdoor_unit
+    assert outdoor_unit is not None
+    assert outdoor_unit.suction_pressure == 193.0
+    assert outdoor_unit.line_voltage == 246
