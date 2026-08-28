@@ -16,7 +16,11 @@ from carrier_api import (
     System,
     WebsocketDataUpdater,
 )
-from carrier_api.api_websocket_data_updater import find_by_id
+from carrier_api.api_websocket_data_updater import (
+    diagnostic_status_values,
+    find_by_id,
+    unwrap_envelope,
+)
 
 FIXTURE_ROOT = Path(__file__).parent
 
@@ -397,3 +401,153 @@ async def test_heartbeat_with_no_device_id_message_handler(
         websocket_message_str: Raw heartbeat websocket message fixture.
     """
     await data_updater.message_handler(websocket_message_str)
+
+
+def test_unwrap_envelope_returns_flat_messages_unchanged() -> None:
+    """Leave a message that is not wrapped in a payload envelope untouched."""
+    message = {"deviceId": "SERIALXXX", "messageType": "InfinityStatus", "oat": 79}
+
+    assert unwrap_envelope(message) == message
+
+
+def test_unwrap_envelope_carries_envelope_device_id_into_the_body() -> None:
+    """Supply the envelope device id when the wrapped body omits its own."""
+    message = {
+        "deviceId": "SERIALXXX",
+        "payload": {"name": "diagnostic-device-info", "value": {}},
+    }
+
+    assert unwrap_envelope(message) == {
+        "deviceId": "SERIALXXX",
+        "name": "diagnostic-device-info",
+        "value": {},
+    }
+
+
+def test_unwrap_envelope_prefers_the_device_id_inside_the_body() -> None:
+    """Keep the wrapped body's own device id when it supplies one."""
+    message = {
+        "deviceId": "ENVELOPE",
+        "payload": {"deviceId": "BODY", "messageType": "InfinityStatus"},
+    }
+
+    assert unwrap_envelope(message)["deviceId"] == "BODY"
+
+
+def test_unwrap_envelope_ignores_a_non_object_payload() -> None:
+    """Treat a message whose payload is not an object as already flat."""
+    message = {"deviceId": "SERIALXXX", "payload": "not-an-object"}
+
+    assert unwrap_envelope(message) == message
+
+
+def test_diagnostic_status_values_maps_system_and_unit_sections() -> None:
+    """Flatten the system section and keep the unit sections addressable."""
+    value = {"system": {"oat": 79}, "idu": {"blwrpm": 540}, "odu": {"suctpress": 193}}
+
+    assert diagnostic_status_values(value) == {
+        "oat": 79,
+        "idu": {"blwrpm": 540},
+        "odu": {"suctpress": 193},
+    }
+
+
+def test_diagnostic_status_values_skips_unknown_sections() -> None:
+    """Return an empty fragment when no recognized section is present."""
+    assert diagnostic_status_values({"unexpected": {"oat": 79}}) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str",
+    ["messages/status_wrapped_in_payload_envelope.json"],
+    indirect=True,
+)
+async def test_status_wrapped_in_payload_envelope_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply a status message that arrives inside a payload envelope.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+        websocket_message_str: Raw enveloped status websocket message fixture.
+    """
+    assert carrier_system.status.outdoor_temperature == 30
+    await data_updater.message_handler(websocket_message_str)
+    assert carrier_system.status.outdoor_temperature == 79
+    assert "payload" not in carrier_system.status.raw
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str", ["messages/diagnostic_device_info.json"], indirect=True
+)
+async def test_diagnostic_device_info_message_handler(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Merge diagnostic unit readings that the status payload does not carry.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+        websocket_message_str: Raw diagnostic-device-info websocket message fixture.
+    """
+    assert "suctpress" not in carrier_system.status.raw["odu"]
+    await data_updater.message_handler(websocket_message_str)
+
+    outdoor_unit_raw = carrier_system.status.raw["odu"]
+    assert outdoor_unit_raw["suctpress"] == 193
+    assert outdoor_unit_raw["dischargetmp"] == 140
+    assert outdoor_unit_raw["linevolt"] == 246
+    assert outdoor_unit_raw["oducoiltmp"] == 76
+    assert outdoor_unit_raw["sucttemp"] == 78
+    assert outdoor_unit_raw["suctsupheat"] == 4.65234375
+    assert outdoor_unit_raw["type"] == "ac2stgeverest"
+    assert carrier_system.status.outdoor_temperature == 79
+    assert carrier_system.status.blower_rpm == 540
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_device_info_without_a_value_object_is_ignored(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+) -> None:
+    """Leave the status model untouched when the diagnostic value is missing.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+    """
+    original_status_payload = carrier_system.status.as_dict()
+    message = json.dumps({"deviceId": "SERIALXXX", "payload": {"name": "diagnostic-device-info"}})
+
+    await data_updater.message_handler(message)
+
+    assert carrier_system.status.as_dict() == original_status_payload
+
+
+@pytest.mark.asyncio
+async def test_unknown_wrapped_message_is_still_logged(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Report a wrapped message whose body is not a known type.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+        caplog: Log capture fixture.
+    """
+    original_status_payload = carrier_system.status.as_dict()
+    message = json.dumps({"deviceId": "SERIALXXX", "payload": {"messageType": "SomethingNew"}})
+
+    await data_updater.message_handler(message)
+
+    assert "Received unknown message" in caplog.text
+    assert carrier_system.status.as_dict() == original_status_payload
