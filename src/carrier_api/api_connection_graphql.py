@@ -1009,6 +1009,49 @@ class ApiConnectionGraphql:
         }
         return await self._update_infinity_zone_config(variables=variables)
 
+    async def set_config_activity(
+        self,
+        system_serial: str,
+        zone_id: str,
+        activity_type: ActivityTypes,
+        heat_set_point: str,
+        cool_set_point: str,
+        fan_mode: FanModes | None = None,
+    ) -> dict[str, Any]:
+        """Update a zone's activity set points and optional fan mode.
+
+        Args:
+            system_serial: Serial number of the system to update.
+            zone_id: Carrier zone identifier.
+            activity_type: Activity to update.
+            heat_set_point: Optional requested heat set point as Carrier expects it.
+            cool_set_point: Optional requested cool set point as Carrier expects it.
+            fan_mode: Optional fan mode to include in the activity update.
+
+        Returns:
+            The decoded mutation response.
+        
+        Raises:
+            ValueError: If ``fan_mode`` or ``activity_type`` is not a valid enum
+                member.
+        """
+        if activity_type not in ActivityTypes:
+            raise ValueError(f"{activity_type} is not a valid activity type")
+        variables = {
+            "input": {
+                "serial": system_serial,
+                "zoneId": zone_id,
+                "activityType": activity_type.value,
+                "htsp": heat_set_point,
+                "clsp": cool_set_point,
+            }
+        }
+        if fan_mode is not None:
+            if fan_mode not in FanModes:
+                raise ValueError(f"{fan_mode} is not a valid fan mode")
+            variables["input"]["fan"] = fan_mode.value
+        return await self._update_infinity_zone_activity(variables=variables)
+
     async def set_config_manual_activity(
         self,
         system_serial: str,
@@ -1033,17 +1076,11 @@ class ApiConnectionGraphql:
             ValueError: If ``fan_mode`` is supplied and is not a valid enum
                 member.
         """
-        variables = {
-            "input": {
-                "serial": system_serial,
-                "zoneId": zone_id,
-                "activityType": "manual",
-                "clsp": cool_set_point,
-                "htsp": heat_set_point,
-            }
-        }
-        if fan_mode is not None:
-            if fan_mode not in FanModes:
-                raise ValueError(f"{fan_mode} is not a valid fan mode")
-            variables["input"]["fan"] = fan_mode.value
-        return await self._update_infinity_zone_activity(variables=variables)
+        return await self.set_config_activity(
+            system_serial=system_serial,
+            zone_id=zone_id,
+            activity_type=ActivityTypes.MANUAL,
+            heat_set_point=heat_set_point,
+            cool_set_point=cool_set_point,
+            fan_mode=fan_mode,
+        )
