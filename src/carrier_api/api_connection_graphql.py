@@ -1030,7 +1030,7 @@ class ApiConnectionGraphql:
 
         Returns:
             The decoded mutation response.
-        
+
         Raises:
             ValueError: If ``fan_mode`` or ``activity_type`` is not a valid enum
                 member.
