@@ -1024,8 +1024,8 @@ class ApiConnectionGraphql:
             system_serial: Serial number of the system to update.
             zone_id: Carrier zone identifier.
             activity_type: Activity to update.
-            heat_set_point: Optional requested heat set point as Carrier expects it.
-            cool_set_point: Optional requested cool set point as Carrier expects it.
+            heat_set_point: requested heat set point as Carrier expects it.
+            cool_set_point: requested cool set point as Carrier expects it.
             fan_mode: Optional fan mode to include in the activity update.
 
         Returns:
