@@ -155,6 +155,9 @@ Available update helpers include:
 - `set_config_hold(...)`
 - `resume_schedule(...)`
 - `set_config_manual_activity(...)`
+- `set_program_day(...)`
+
+`set_program_day(...)` replaces one day of a zone's program (`updateInfinityProgramDay`). Send every period of the day, enabled or not, with the `etag` the systems query returns (`load_data()` now reads the program's and each day's `etag`). It has not yet been verified against a live system.
 
 These methods can change real HVAC settings. Validate the selected system, zone, mode, and set points before calling them from automation.
 

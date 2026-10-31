@@ -434,8 +434,10 @@ class ApiConnectionGraphql:
                     occEnabled
                     program {
                       id
+                      etag
                       day {
                         id
+                        etag
                         zoneId
                         period {
                           id
@@ -811,6 +813,42 @@ class ApiConnectionGraphql:
             _LOGGER.warning("No API websocket connection")
         return response
 
+    async def _update_infinity_program_day(self, variables: dict[str, Any]) -> dict[str, Any]:
+        """Run the Carrier zone program day mutation.
+
+        Args:
+            variables: GraphQL variables containing an ``InfinityProgramDayInput``.
+
+        Returns:
+            The decoded mutation response.
+        """
+        query = gql(
+            """
+            mutation updateInfinityProgramDay($input: InfinityProgramDayInput!) {
+                updateInfinityProgramDay(input: $input) {
+                    id
+                    etag
+                    zoneId
+                    period {
+                        id
+                        activity
+                        time
+                        enabled
+                    }
+                }
+            }
+            """
+        )
+        _LOGGER.debug("updateInfinityProgramDay: %s", variables)
+        response = await self.authed_query(
+            operation_name="updateInfinityProgramDay", query=query, variable_values=variables
+        )
+        if self.api_websocket is not None:
+            await self.api_websocket.send_reconcile()
+        else:
+            _LOGGER.warning("No API websocket connection")
+        return response
+
     async def set_config_mode(self, system_serial: str, mode: SystemModes) -> dict[str, Any]:
         """Update a Carrier system's operating mode.
 
@@ -1084,3 +1122,54 @@ class ApiConnectionGraphql:
             cool_set_point=cool_set_point,
             fan_mode=fan_mode,
         )
+
+    async def set_program_day(
+        self,
+        system_serial: str,
+        zone_id: str,
+        day_id: str,
+        periods: list[dict[str, str]],
+        etag: str,
+    ) -> dict[str, Any]:
+        """Replace one day of a zone's program.
+
+        The Carrier replaces the day with the periods sent, so pass every period
+        of the day, enabled or not, as the systems query returns them.
+
+        Args:
+            system_serial: Serial number of the system to update.
+            zone_id: Carrier zone identifier.
+            day_id: Carrier day identifier as the program returns it (``"0"`` to
+                ``"6"``).
+            periods: The day's periods, each with ``id`` and ``activity`` and
+                optionally ``time`` (``HH:MM``) and ``enabled`` (``on``/``off``).
+            etag: Etag read from the systems query, which the mutation requires.
+
+        Returns:
+            The decoded mutation response.
+
+        Raises:
+            ValueError: If a period is missing ``id`` or ``activity``, has an
+                unknown key, or names an activity that is not a valid
+                ``ActivityTypes`` value.
+        """
+        activities = {activity.value for activity in ActivityTypes}
+        allowed_keys = {"id", "activity", "time", "enabled"}
+        for period in periods:
+            unknown_keys = set(period) - allowed_keys
+            if unknown_keys:
+                raise ValueError(f"unknown program period keys: {sorted(unknown_keys)}")
+            if not period.get("id"):
+                raise ValueError("program period is missing its id")
+            if period.get("activity") not in activities:
+                raise ValueError(f"{period.get('activity')} is not a valid activity type")
+        variables = {
+            "input": {
+                "serial": system_serial,
+                "etag": etag,
+                "zoneId": zone_id,
+                "dayId": day_id,
+                "period": [dict(period) for period in periods],
+            }
+        }
+        return await self._update_infinity_program_day(variables=variables)
