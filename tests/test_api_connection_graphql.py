@@ -1189,6 +1189,7 @@ async def test_update_methods_send_reconcile_when_websocket_exists() -> None:
     config_variables: dict[str, Any] = {"input": {"serial": "SERIAL"}}
     zone_activity_variables: dict[str, Any] = {"input": {"serial": "SERIAL"}}
     zone_config_variables: dict[str, Any] = {"input": {"serial": "SERIAL"}}
+    program_day_variables: dict[str, Any] = {"input": {"serial": "SERIAL"}}
 
     assert await connection._update_infinity_config(config_variables) == {
         "operation": "updateInfinityConfig",
@@ -1202,7 +1203,11 @@ async def test_update_methods_send_reconcile_when_websocket_exists() -> None:
         "operation": "updateInfinityZoneConfig",
         "variables": zone_config_variables,
     }
-    assert websocket.calls == 3
+    assert await connection._update_infinity_program_day(program_day_variables) == {
+        "operation": "updateInfinityProgramDay",
+        "variables": program_day_variables,
+    }
+    assert websocket.calls == 4
 
 
 @pytest.mark.asyncio
@@ -1275,3 +1280,107 @@ async def test_load_entry_level_data_parses_systems(
     assert len(systems) == 1
     assert systems[0].serial == "SERIALXXX"
     assert systems[0].zones[0].mode == "cool"
+
+
+PROGRAM_DAY_PERIODS: list[dict[str, str]] = [
+    {"id": "1", "activity": "wake", "time": "06:00", "enabled": "on"},
+    {"id": "2", "activity": "away", "time": "08:00", "enabled": "on"},
+    {"id": "3", "activity": "home", "time": "18:00", "enabled": "on"},
+    {"id": "4", "activity": "sleep", "time": "22:00", "enabled": "on"},
+    {"id": "5", "activity": "home", "time": "00:00", "enabled": "off"},
+]
+
+
+@pytest.mark.asyncio
+async def test_set_program_day_sends_the_day_with_its_etag(connection: SpyConnection) -> None:
+    """Send every period of the day unchanged with the caller's etag.
+
+    Args:
+        connection: Spy connection under test.
+    """
+    await connection.set_program_day(
+        system_serial="SERIAL",
+        zone_id="1",
+        day_id="3",
+        periods=PROGRAM_DAY_PERIODS,
+        etag="ETAG",
+    )
+
+    assert connection.authed_calls == [
+        (
+            "updateInfinityProgramDay",
+            {
+                "input": {
+                    "serial": "SERIAL",
+                    "etag": "ETAG",
+                    "zoneId": "1",
+                    "dayId": "3",
+                    "period": PROGRAM_DAY_PERIODS,
+                }
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_set_program_day_omits_optional_period_fields(connection: SpyConnection) -> None:
+    """Send only the period fields the caller supplied.
+
+    Args:
+        connection: Spy connection under test.
+    """
+    await connection.set_program_day("SERIAL", "1", "0", [{"id": "1", "activity": "home"}], "E")
+
+    assert connection.authed_calls[0][1]["input"]["period"] == [{"id": "1", "activity": "home"}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "period",
+    [
+        {"activity": "home", "time": "06:00"},
+        {"id": "1", "time": "06:00"},
+        {"id": "1", "activity": "nap", "time": "06:00"},
+        {"id": "1", "activity": "home", "colour": "blue"},
+    ],
+)
+async def test_set_program_day_rejects_invalid_periods(
+    connection: SpyConnection, period: dict[str, str]
+) -> None:
+    """Reject periods the Carrier schema would refuse before sending anything.
+
+    Args:
+        connection: Spy connection under test.
+        period: Invalid period payload.
+    """
+    with pytest.raises(ValueError):
+        await connection.set_program_day("SERIAL", "1", "0", [period], "ETAG")
+
+    assert connection.authed_calls == []
+
+
+@pytest.mark.asyncio
+async def test_set_program_day_surfaces_a_stale_etag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Raise a Carrier GraphQL error when the server refuses the day.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+    """
+    transport_error = TransportQueryError("etag mismatch")
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
+    )
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    connection.refresh_token = "refresh"
+    connection.token_type = "Bearer"
+    connection.access_token = "access"
+    connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+    with pytest.raises(errors.CarrierApiGraphqlError) as error:
+        await connection.set_program_day("SERIAL", "1", "0", PROGRAM_DAY_PERIODS, "STALE")
+
+    assert error.value.__cause__ is transport_error
