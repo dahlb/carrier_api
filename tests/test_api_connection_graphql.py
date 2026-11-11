@@ -1,9 +1,10 @@
 """Tests for Carrier GraphQL API connection helpers."""
 
+import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import Any, Self, cast
+from typing import Any, ClassVar, Self, cast
 
-from aiohttp import ClientConnectionError, ClientError, ClientResponseError, ClientSession
+from aiohttp import ClientConnectionError, ClientError, ClientSession
 from gql import GraphQLRequest, gql
 from gql.transport.exceptions import TransportQueryError, TransportServerError
 import pytest
@@ -15,85 +16,16 @@ from carrier_api.const import ActivityTypes, FanModes, HeatSourceTypes, SystemMo
 from carrier_api.system import System
 
 
-class FakeResponse:
-    """Minimal aiohttp response double for token refresh tests."""
-
-    def __init__(
-        self,
-        payload: object,
-        status_error: ClientResponseError | None = None,
-        json_error: BaseException | None = None,
-    ) -> None:
-        """Initialize the fake response with JSON payload data.
-
-        Args:
-            payload: Data returned from ``json``.
-            status_error: Optional error raised by ``raise_for_status``.
-            json_error: Optional error raised by ``json``.
-        """
-        self.payload = payload
-        self.status_error = status_error
-        self.json_error = json_error
-        self.raise_for_status_called = False
-
-    def raise_for_status(self) -> None:
-        """Record status validation and raise the configured status error.
-
-        Raises:
-            ClientResponseError: When ``status_error`` is configured.
-        """
-        self.raise_for_status_called = True
-        if self.status_error is not None:
-            raise self.status_error
-
-    async def json(self) -> object:
-        """Return the configured JSON payload.
-
-        Returns:
-            The fake response payload.
-
-        Raises:
-            BaseException: When ``json_error`` is configured.
-        """
-        if self.json_error is not None:
-            raise self.json_error
-        return self.payload
-
-
 class FakeSession:
     """Minimal session double used by connection tests."""
 
     def __init__(self) -> None:
         """Initialize captured session state."""
         self.closed = False
-        self.post_url: str | None = None
-        self.post_data: dict[str, Any] | None = None
-        self.response = FakeResponse(
-            {
-                "expires_in": 3600,
-                "token_type": "Bearer",
-                "access_token": "new-access",
-                "refresh_token": "new-refresh",
-            }
-        )
 
     async def close(self) -> None:
         """Record that the session was closed."""
         self.closed = True
-
-    async def post(self, url: str, data: dict[str, Any]) -> FakeResponse:
-        """Capture a token refresh request.
-
-        Args:
-            url: Requested URL.
-            data: Submitted form data.
-
-        Returns:
-            The fake token refresh response.
-        """
-        self.post_url = url
-        self.post_data = data
-        return self.response
 
 
 class FakeGraphQLClient:
@@ -436,254 +368,256 @@ async def test_cleanup_wraps_session_close_errors(
     assert error.value.__cause__ is cleanup_error
 
 
-@pytest.mark.asyncio
-async def test_refresh_auth_token_updates_token_state() -> None:
-    """Refresh auth tokens from the OAuth response payload."""
-    session = FakeSession()
+class FetchAccessTokenClient:
+    """GraphQL client double for ``fetchAccessToken`` refresh calls."""
+
+    calls: ClassVar[list[dict[str, Any]]] = []
+    result: ClassVar[object] = None
+    error: ClassVar[BaseException | None] = None
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Accept GraphQL client construction arguments."""
+
+    async def __aenter__(self) -> Self:
+        """Return the fake session.
+
+        Returns:
+            The fake GraphQL session.
+        """
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        """Exit the fake session context.
+
+        Args:
+            args: Context manager exception details.
+        """
+
+    async def execute(
+        self,
+        query: GraphQLRequest,
+        *,
+        variable_values: dict[str, Any],
+        operation_name: str,
+    ) -> object:
+        """Record the refresh call and return or raise the configured outcome.
+
+        Args:
+            query: GraphQL request.
+            variable_values: Variables supplied to the mutation.
+            operation_name: GraphQL operation name.
+
+        Returns:
+            The configured GraphQL result.
+
+        Raises:
+            BaseException: When ``error`` is configured.
+        """
+        FetchAccessTokenClient.calls.append(
+            {"operation_name": operation_name, "variables": variable_values}
+        )
+        if FetchAccessTokenClient.error is not None:
+            raise FetchAccessTokenClient.error
+        return FetchAccessTokenClient.result
+
+
+@pytest.fixture
+def fetch_access_token(monkeypatch: pytest.MonkeyPatch) -> type[FetchAccessTokenClient]:
+    """Route GraphQL clients to the ``fetchAccessToken`` double.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client.
+
+    Returns:
+        The configured client double class.
+    """
+    FetchAccessTokenClient.calls = []
+    FetchAccessTokenClient.result = None
+    FetchAccessTokenClient.error = None
+    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", FetchAccessTokenClient)
+    return FetchAccessTokenClient
+
+
+def _fetch_result(**data: object) -> dict[str, Any]:
+    """Build a successful ``fetchAccessToken`` result.
+
+    Args:
+        data: Token fields overriding the defaults.
+
+    Returns:
+        A GraphQL result payload.
+    """
+    token_data: dict[str, object] = {
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "access_token": "new-access",
+        "scope": "login",
+        "refresh_token": "new-refresh",
+        **data,
+    }
+    return {"fetchAccessToken": {"success": True, "errorMessage": None, "data": token_data}}
+
+
+def _refresh_connection() -> ApiConnectionGraphql:
+    """Build a connection holding a stored refresh token.
+
+    Returns:
+        A connection ready for ``refresh_auth_token``.
+    """
     connection = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
-        client_session=cast("ClientSession", session),
+        client_session=cast("ClientSession", FakeSession()),
     )
     connection.refresh_token = "old-refresh"
+    return connection
+
+
+@pytest.mark.asyncio
+async def test_refresh_auth_token_uses_fetch_access_token(
+    fetch_access_token: type[FetchAccessTokenClient],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Refresh through Carrier's mutation and store the rotated token state.
+
+    Args:
+        fetch_access_token: GraphQL client double for the refresh mutation.
+        caplog: Pytest log capture fixture.
+    """
+    caplog.set_level("DEBUG", logger="carrier_api.api_connection_graphql")
+    fetch_access_token.result = _fetch_result()
+    connection = _refresh_connection()
 
     await connection.refresh_auth_token()
 
-    assert session.response.raise_for_status_called
-    assert session.post_url == "https://sso.carrier.com/oauth2/default/v1/token"
-    assert session.post_data == {
-        "client_id": "0oa1ce7hwjuZbfOMB4x7",
-        "grant_type": "refresh_token",
-        "refresh_token": "old-refresh",
-        "scope": "offline_access",
-    }
+    assert fetch_access_token.calls == [
+        {
+            "operation_name": "fetchAccessToken",
+            "variables": {"input": {"username": "user@example.com", "refreshToken": "old-refresh"}},
+        }
+    ]
     assert connection.token_type == "Bearer"
     assert connection.access_token == "new-access"
     assert connection.refresh_token == "new-refresh"
     assert connection.expires_at > datetime.now(UTC)
+    assert "refresh token rotated" in caplog.text
+    assert "new-refresh" not in caplog.text
+    assert "new-access" not in caplog.text
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "refresh_error",
-    [
-        ClientConnectionError("token refresh connection failed"),
-        TimeoutError("token refresh timed out"),
-        OSError("token refresh socket failed"),
-    ],
-)
-async def test_refresh_auth_token_wraps_refresh_failures(
-    refresh_error: ClientError | TimeoutError | OSError,
+@pytest.mark.parametrize("refresh_token", ["old-refresh", None])
+async def test_refresh_auth_token_keeps_unrotated_refresh_token(
+    fetch_access_token: type[FetchAccessTokenClient],
+    caplog: pytest.LogCaptureFixture,
+    refresh_token: str | None,
 ) -> None:
-    """Raise Carrier token refresh errors instead of raw HTTP exceptions."""
-
-    class FailingSession(FakeSession):
-        """Session double that fails token refresh requests."""
-
-        async def post(self, url: str, data: dict[str, Any]) -> FakeResponse:
-            """Raise the configured refresh error.
-
-            Args:
-                url: Requested URL.
-                data: Submitted form data.
-
-            Raises:
-                ClientError | TimeoutError | OSError: Always raised for this
-                    failing session.
-            """
-            raise refresh_error
-
-    connection = ApiConnectionGraphql(
-        username="user@example.com",
-        password="password",
-        client_session=cast("ClientSession", FailingSession()),
-    )
-    connection.refresh_token = "old-refresh"
-
-    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
-        await connection.refresh_auth_token()
-
-    assert error.value.__cause__ is refresh_error
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("status", "payload"),
-    [(401, {}), (400, {"error": "invalid_grant"})],
-)
-async def test_refresh_auth_token_treats_auth_rejections_as_auth_error(
-    status: int,
-    payload: object,
-) -> None:
-    """Raise auth errors for rejected token refresh responses.
+    """Keep the stored refresh token when the provider does not rotate it.
 
     Args:
-        status: HTTP status returned by the fake token endpoint.
-        payload: JSON payload returned by the fake token endpoint.
+        fetch_access_token: GraphQL client double for the refresh mutation.
+        caplog: Pytest log capture fixture.
+        refresh_token: Refresh token returned by the mutation.
     """
-    refresh_error = ClientResponseError(
-        request_info=None,  # type: ignore[arg-type]
-        history=(),
-        status=status,
-        message="token rejected",
-    )
+    caplog.set_level("DEBUG", logger="carrier_api.api_connection_graphql")
+    fetch_access_token.result = _fetch_result(refresh_token=refresh_token)
+    connection = _refresh_connection()
 
-    session = FakeSession()
-    session.response = FakeResponse(payload, status_error=refresh_error)
-    connection = ApiConnectionGraphql(
-        username="user@example.com",
-        password="password",
-        client_session=cast("ClientSession", session),
-    )
-    connection.refresh_token = "old-refresh"
+    await connection.refresh_auth_token()
+
+    assert connection.refresh_token == "old-refresh"
+    assert connection.access_token == "new-access"
+    assert "refresh token unchanged" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_refresh_auth_token_treats_unsuccessful_result_as_auth_error(
+    fetch_access_token: type[FetchAccessTokenClient],
+) -> None:
+    """Raise auth errors when Carrier reports the refresh as unsuccessful.
+
+    Args:
+        fetch_access_token: GraphQL client double for the refresh mutation.
+    """
+    rejection = {
+        "success": False,
+        "errorMessage": "AADSTS9002313: Invalid request.",
+        "data": None,
+    }
+    fetch_access_token.result = {"fetchAccessToken": rejection}
+    connection = _refresh_connection()
 
     with pytest.raises(errors.CarrierApiAuthError) as error:
         await connection.refresh_auth_token()
 
+    assert error.value.payload == rejection
+    assert connection.refresh_token == "old-refresh"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("refresh_error", "expected"),
+    [
+        (TransportQueryError("refresh failed"), errors.CarrierApiTokenRefreshError),
+        (ClientConnectionError("connection failed"), errors.CarrierApiTokenRefreshError),
+        (TimeoutError("timed out"), errors.CarrierApiTokenRefreshError),
+        (OSError("socket failed"), errors.CarrierApiTokenRefreshError),
+        (TransportServerError("server error", 500), errors.CarrierApiTokenRefreshError),
+        (TransportServerError("unauthorized", 401), errors.CarrierApiAuthError),
+    ],
+)
+async def test_refresh_auth_token_normalizes_request_failures(
+    fetch_access_token: type[FetchAccessTokenClient],
+    refresh_error: BaseException,
+    expected: type[errors.CarrierApiError],
+) -> None:
+    """Map refresh request failures to Carrier errors.
+
+    Args:
+        fetch_access_token: GraphQL client double for the refresh mutation.
+        refresh_error: Error raised by the GraphQL client.
+        expected: Carrier error expected from the refresh.
+    """
+    fetch_access_token.error = refresh_error
+    connection = _refresh_connection()
+
+    with pytest.raises(expected) as error:
+        await connection.refresh_auth_token()
+
+    assert type(error.value) is expected
     assert error.value.__cause__ is refresh_error
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "json_error",
+    "result",
     [
-        TimeoutError("refresh error body timed out"),
-        OSError("refresh error body socket failed"),
+        None,
+        {},
+        {"fetchAccessToken": None},
+        {"fetchAccessToken": {"success": True, "errorMessage": None, "data": None}},
+        {"fetchAccessToken": {"success": True, "data": {}}},
+        {"fetchAccessToken": {"success": True, "data": {"token_type": "Bearer"}}},
     ],
 )
-async def test_refresh_auth_token_normalizes_unreadable_error_payloads(
-    json_error: TimeoutError | OSError,
+async def test_refresh_auth_token_rejects_malformed_results(
+    fetch_access_token: type[FetchAccessTokenClient],
+    result: object,
 ) -> None:
-    """Raise Carrier errors when refresh error payload reads fail.
+    """Raise token refresh errors for malformed mutation results.
 
     Args:
-        json_error: Error raised while reading the refresh error response body.
+        fetch_access_token: GraphQL client double for the refresh mutation.
+        result: Malformed GraphQL result.
     """
-    refresh_error = ClientResponseError(
-        request_info=None,  # type: ignore[arg-type]
-        history=(),
-        status=401,
-        message="unauthorized",
-    )
+    fetch_access_token.result = result
+    connection = _refresh_connection()
 
-    session = FakeSession()
-    session.response = FakeResponse(
-        {},
-        status_error=refresh_error,
-        json_error=json_error,
-    )
-    connection = ApiConnectionGraphql(
-        username="user@example.com",
-        password="password",
-        client_session=cast("ClientSession", session),
-    )
-    connection.refresh_token = "old-refresh"
-
-    with pytest.raises(errors.CarrierApiAuthError) as error:
+    with pytest.raises(errors.CarrierApiTokenRefreshError):
         await connection.refresh_auth_token()
 
-    assert error.value.__cause__ is refresh_error
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("payload", [None, ["invalid_grant"], "invalid_grant"])
-async def test_refresh_auth_token_ignores_non_object_error_payloads(
-    payload: object,
-) -> None:
-    """Keep non-object refresh error payloads in the refresh-failure bucket.
-
-    Args:
-        payload: Non-object JSON payload returned by the fake response.
-    """
-    refresh_error = ClientResponseError(
-        request_info=None,  # type: ignore[arg-type]
-        history=(),
-        status=400,
-        message="bad request",
-    )
-
-    session = FakeSession()
-    session.response = FakeResponse(payload, status_error=refresh_error)
-    connection = ApiConnectionGraphql(
-        username="user@example.com",
-        password="password",
-        client_session=cast("ClientSession", session),
-    )
-    connection.refresh_token = "old-refresh"
-
-    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
-        await connection.refresh_auth_token()
-
-    assert error.value.__cause__ is refresh_error
-
-
-@pytest.mark.asyncio
-async def test_refresh_auth_token_normalizes_malformed_error_payload() -> None:
-    """Keep malformed refresh error payloads normalized as Carrier errors."""
-    refresh_error = ClientResponseError(
-        request_info=None,  # type: ignore[arg-type]
-        history=(),
-        status=400,
-        message="bad request",
-    )
-
-    session = FakeSession()
-    session.response = FakeResponse(
-        {},
-        status_error=refresh_error,
-        json_error=ValueError("invalid json"),
-    )
-    connection = ApiConnectionGraphql(
-        username="user@example.com",
-        password="password",
-        client_session=cast("ClientSession", session),
-    )
-    connection.refresh_token = "old-refresh"
-
-    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
-        await connection.refresh_auth_token()
-
-    assert error.value.__cause__ is refresh_error
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("payload", "cause_type"),
-    [
-        (
-            {
-                "expires_in": 3600,
-                "token_type": "Bearer",
-                "access_token": "new-access",
-            },
-            KeyError,
-        ),
-        (None, TypeError),
-    ],
-)
-async def test_refresh_auth_token_normalizes_malformed_success_payloads(
-    payload: object,
-    cause_type: type[BaseException],
-) -> None:
-    """Raise token refresh errors for malformed successful OAuth responses.
-
-    Args:
-        payload: Malformed successful OAuth payload returned by the fake response.
-        cause_type: Expected original exception type preserved as the cause.
-    """
-    session = FakeSession()
-    session.response = FakeResponse(payload)
-    connection = ApiConnectionGraphql(
-        username="user@example.com",
-        password="password",
-        client_session=cast("ClientSession", session),
-    )
-    connection.refresh_token = "old-refresh"
-
-    with pytest.raises(errors.CarrierApiTokenRefreshError) as error:
-        await connection.refresh_auth_token()
-
-    assert isinstance(error.value.__cause__, cause_type)
+    assert connection.refresh_token == "old-refresh"
+    assert connection.access_token is None
 
 
 @pytest.mark.asyncio
@@ -702,6 +636,107 @@ async def test_check_auth_expiration_logs_in_then_refreshes_when_expired(
 
     assert connection.login_count == 1
     assert connection.refresh_count == 1
+
+
+class RefreshSpyConnection(ApiConnectionGraphql):
+    """Connection double whose token refresh outcome is configurable."""
+
+    def __init__(self, refresh_error: BaseException | None = None) -> None:
+        """Initialize an expired connection with a stored refresh token.
+
+        Args:
+            refresh_error: Optional error raised by every token refresh.
+        """
+        super().__init__(
+            username="user@example.com",
+            password="password",
+            client_session=cast("ClientSession", FakeSession()),
+        )
+        self.refresh_error = refresh_error
+        self.login_error: BaseException | None = None
+        self.refresh_token = "stored-refresh"
+        self.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        self.login_count = 0
+        self.refreshed_tokens: list[str | None] = []
+
+    async def login(self) -> None:
+        """Record login calls and seed fresh token state.
+
+        Raises:
+            BaseException: When ``login_error`` is configured.
+        """
+        self.login_count += 1
+        if self.login_error is not None:
+            raise self.login_error
+        self.refresh_token = "login-refresh"
+        self.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+    async def refresh_auth_token(self) -> None:
+        """Record the refresh token used and rotate it like Okta.
+
+        Raises:
+            BaseException: When ``refresh_error`` is configured.
+        """
+        self.refreshed_tokens.append(self.refresh_token)
+        await asyncio.sleep(0)
+        if self.refresh_error is not None:
+            raise self.refresh_error
+        self.refresh_token = f"rotated-{len(self.refreshed_tokens)}"
+        self.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+
+@pytest.mark.asyncio
+async def test_check_auth_expiration_logs_in_when_refresh_is_rejected() -> None:
+    """Fall back to one password login when Carrier rejects the refresh token."""
+    connection = RefreshSpyConnection(errors.CarrierApiAuthError("rejected"))
+
+    await connection.check_auth_expiration()
+
+    assert connection.refreshed_tokens == ["stored-refresh"]
+    assert connection.login_count == 1
+    assert connection.refresh_token == "login-refresh"
+    assert connection.expires_at > datetime.now(UTC)
+
+
+@pytest.mark.asyncio
+async def test_check_auth_expiration_raises_when_fallback_login_is_rejected() -> None:
+    """Surface auth errors when the fallback password login is also rejected."""
+    connection = RefreshSpyConnection(errors.CarrierApiAuthError("rejected"))
+    login_error = errors.CarrierApiAuthError("bad password")
+    connection.login_error = login_error
+
+    with pytest.raises(errors.CarrierApiAuthError) as error:
+        await connection.check_auth_expiration()
+
+    assert error.value is login_error
+    assert connection.refresh_token is None
+
+
+@pytest.mark.asyncio
+async def test_check_auth_expiration_keeps_token_on_transient_refresh_failure() -> None:
+    """Do not log in again when token refresh fails for transient reasons."""
+    connection = RefreshSpyConnection(errors.CarrierApiTokenRefreshError("network"))
+
+    with pytest.raises(errors.CarrierApiTokenRefreshError):
+        await connection.check_auth_expiration()
+
+    assert connection.login_count == 0
+    assert connection.refresh_token == "stored-refresh"
+
+
+@pytest.mark.asyncio
+async def test_check_auth_expiration_serializes_concurrent_refreshes() -> None:
+    """Send a single-use refresh token only once when callers race after expiry."""
+    connection = RefreshSpyConnection()
+
+    await asyncio.gather(
+        connection.check_auth_expiration(),
+        connection.check_auth_expiration(),
+        connection.check_auth_expiration(),
+    )
+
+    assert connection.refreshed_tokens == ["stored-refresh"]
+    assert connection.refresh_token == "rotated-1"
 
 
 @pytest.mark.asyncio
