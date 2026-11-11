@@ -551,3 +551,74 @@ async def test_unknown_wrapped_message_is_still_logged(
 
     assert "Received unknown message" in caplog.text
     assert carrier_system.status.as_dict() == original_status_payload
+
+
+@pytest.mark.asyncio
+async def test_status_message_that_fails_to_parse_leaves_status_untouched(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+) -> None:
+    """Keep a status message that cannot be parsed out of the stored raw status.
+
+    A merged value that fails ``Status`` would otherwise stay in ``raw`` and
+    fail every later status message too.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+    """
+    zone_id = carrier_system.status.zones[0].api_id
+    original_status_payload = carrier_system.status.as_dict()
+    bad_message = json.dumps(
+        {
+            "messageType": "InfinityStatus",
+            "deviceId": "SERIALXXX",
+            "zones": [{"id": zone_id, "fan": "turbo"}],
+        }
+    )
+    good_message = json.dumps(
+        {
+            "messageType": "InfinityStatus",
+            "deviceId": "SERIALXXX",
+            "zones": [{"id": zone_id, "zoneconditioning": "idle"}],
+        }
+    )
+
+    with pytest.raises(ValueError, match="turbo"):
+        await data_updater.message_handler(bad_message)
+
+    assert carrier_system.status.as_dict() == original_status_payload
+    assert "turbo" not in json.dumps(carrier_system.status.raw)
+
+    await data_updater.message_handler(good_message)
+
+    assert carrier_system.status.zones[0].conditioning == "idle"
+
+
+@pytest.mark.asyncio
+async def test_config_message_that_fails_to_parse_leaves_config_untouched(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+) -> None:
+    """Keep a config message that cannot be parsed out of the stored raw config.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+    """
+    zone = carrier_system.config.raw["zones"][0]
+    activity_id = zone["activities"][0]["id"]
+    original_config_payload = carrier_system.config.as_dict()
+    bad_message = json.dumps(
+        {
+            "messageType": "InfinityConfig",
+            "deviceId": "SERIALXXX",
+            "zones": [{"id": zone["id"], "activities": [{"id": activity_id, "type": "bogus"}]}],
+        }
+    )
+
+    with pytest.raises(ValueError, match="bogus"):
+        await data_updater.message_handler(bad_message)
+
+    assert carrier_system.config.as_dict() == original_config_payload
+    assert "bogus" not in json.dumps(carrier_system.config.raw)

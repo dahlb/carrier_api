@@ -688,6 +688,46 @@ def test_safely_get_json_value_handles_nested_lists_none_and_cast_failures() -> 
     assert safely_get_json_value([], "missing") is None
 
 
+def test_safely_get_json_value_unwraps_single_value_objects() -> None:
+    """Unwrap Carrier's ``{"_": value}`` and self-named single-value objects."""
+    payload = {
+        "blwrpm": {"_": "450"},
+        "aclinecurrent": {"aclinecurrent": "2.1"},
+        "opstat": {"_": "none"},
+    }
+
+    assert safely_get_json_value(payload, "blwrpm", int) == 450
+    assert safely_get_json_value(payload, "blwrpm") == "450"
+    assert safely_get_json_value(payload, "aclinecurrent", float) == 2.1
+    assert safely_get_json_value(payload, "opstat") is None
+
+
+def test_safely_get_json_value_returns_none_when_cast_raises_type_error() -> None:
+    """Return None rather than raising when a value's type cannot be cast."""
+    payload = {"cfm": {"min": 400, "max": 600}, "linevolt": ["249"]}
+
+    assert safely_get_json_value(payload, "cfm", int) is None
+    assert safely_get_json_value(payload, "linevolt", int) is None
+
+
+def test_status_reads_wrapped_unit_values() -> None:
+    """Build unit readings from wrapped values instead of failing the status."""
+    status = Status(
+        {
+            "cfgem": "F",
+            "utcTime": "2026-09-22T18:42:50.000Z",
+            "zones": [],
+            "idu": {"blwrpm": {"_": "450"}, "cfm": {"cfm": "400"}},
+            "odu": {"linevolt": {"_": "249"}},
+        }
+    )
+
+    assert status.blower_rpm == 450
+    assert status.airflow_cfm == 400
+    assert status.outdoor_unit is not None
+    assert status.outdoor_unit.line_voltage == 249
+
+
 def test_activity_and_fan_string_representations() -> None:
     """Serialize standalone config activity values."""
     activity = ConfigZoneActivity(

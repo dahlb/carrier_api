@@ -1,5 +1,6 @@
 """Apply Carrier realtime websocket messages to in-memory system models."""
 
+from copy import deepcopy
 from datetime import UTC, datetime
 from json import loads
 from logging import getLogger
@@ -124,6 +125,11 @@ class WebsocketDataUpdater:
         ``diagnostic-device-info`` messages merge their system and unit readings
         into the raw status payload.
 
+        Each message is merged into a copy of the raw payload, and the stored
+        payload is only replaced once the rebuilt model parses. A message that
+        fails to parse therefore raises without leaving its values behind in
+        ``raw``, where they would fail every later message for that system too.
+
         Args:
             websocket_message: JSON websocket message text from Carrier realtime
                 updates.
@@ -147,24 +153,26 @@ class WebsocketDataUpdater:
         match message_type or message_name:
             case "InfinityStatus":
                 _LOGGER.debug("InfinityStatus received: %s", websocket_message)
+                status_raw = deepcopy(system.status.raw)
                 zones = websocket_message_json.pop("zones", [])
                 for zone in zones:
                     _timestamp = zone.pop("timestamp", None)
-                    stale_zone = find_by_id(system.status.raw["zones"], zone["id"])
+                    stale_zone = find_by_id(status_raw["zones"], zone["id"])
                     always_merger.merge(stale_zone, zone)
-                merged_status = always_merger.merge(system.status.raw, websocket_message_json)
+                merged_status = always_merger.merge(status_raw, websocket_message_json)
                 merged_status.update({"utcTime": datetime.now(UTC).isoformat()})
                 system.status = Status(merged_status)
             case "InfinityConfig":
                 _message_id = websocket_message_json.pop("id", None)
                 _config_id = websocket_message_json.pop("infinitySystemConfigurationId", None)
                 _LOGGER.debug("InfinityConfig received: %s", websocket_message)
+                config_raw = deepcopy(system.config.raw)
                 zones = websocket_message_json.pop("zones", [])
                 for zone in zones:
                     _timestamp = zone.pop("timestamp", None)
                     if "id" in zone:
                         zone_id = zone["id"]
-                        stale_zone = find_by_id(system.config.raw["zones"], zone_id)
+                        stale_zone = find_by_id(config_raw["zones"], zone_id)
                         activities = zone.pop("activities", [])
                         for activity in activities:
                             _timestamp = activity.pop("timestamp", None)
@@ -174,8 +182,8 @@ class WebsocketDataUpdater:
                             if stale_activity is not None:
                                 always_merger.merge(stale_activity, activity)
                         always_merger.merge(stale_zone, zone)
-                always_merger.merge(system.config.raw, websocket_message_json)
-                system.config = Config(system.config.raw)
+                merged_config = always_merger.merge(config_raw, websocket_message_json)
+                system.config = Config(merged_config)
             case "diagnostic-device-info":
                 _LOGGER.debug("diagnostic-device-info received: %s", websocket_message)
                 value = websocket_message_json.pop("value", None)
@@ -186,7 +194,7 @@ class WebsocketDataUpdater:
                 if not status_values:
                     _LOGGER.debug("diagnostic-device-info carried no known sections, skipping")
                     return
-                merged_status = always_merger.merge(system.status.raw, status_values)
+                merged_status = always_merger.merge(deepcopy(system.status.raw), status_values)
                 merged_status.update({"utcTime": datetime.now(UTC).isoformat()})
                 system.status = Status(merged_status)
             case _:

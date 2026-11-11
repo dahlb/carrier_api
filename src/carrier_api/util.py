@@ -16,8 +16,10 @@ def safely_get_json_value(
 
     Dot-separated key segments traverse dictionaries and lists. Missing keys,
     invalid indexes, and incompatible container types resolve to ``None`` so
-    model constructors can tolerate partial Carrier payloads. String values of
-    ``"none"`` are normalized to ``None`` before optional casting.
+    model constructors can tolerate partial Carrier payloads. Carrier sometimes
+    wraps a scalar in a single-key object, either ``{"_": value}`` or one keyed
+    by the field's own name, so those are unwrapped to the inner value. String
+    values of ``"none"`` are normalized to ``None`` before optional casting.
 
     Args:
         json: Mapping or list to traverse.
@@ -39,6 +41,11 @@ def safely_get_json_value(
                 except TypeError, KeyError, ValueError, IndexError:
                     value = None
 
+    if isinstance(value, Mapping) and len(value) == 1:
+        ((wrapper_key, wrapped_value),) = value.items()
+        if wrapper_key in ("_", key.rsplit(".", maxsplit=1)[-1]):
+            value = wrapped_value
+
     try:
         if value.lower() == "none":
             value = None
@@ -48,7 +55,7 @@ def safely_get_json_value(
     if callable_to_cast is not None and value is not None:
         try:
             value = callable_to_cast(value)
-        except ValueError:
+        except TypeError, ValueError:
             _LOGGER.exception("Unable to cast JSON value")
             value = None
     return value
