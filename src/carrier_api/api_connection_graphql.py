@@ -1,10 +1,11 @@
 """GraphQL client for Carrier authentication, queries, and config updates."""
 
+from asyncio import Lock
 from datetime import UTC, datetime, timedelta
 from logging import getLogger
 from typing import Any, Literal
 
-from aiohttp import ClientError, ClientResponseError, ClientSession
+from aiohttp import ClientError, ClientSession
 from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import (
@@ -34,6 +35,24 @@ GRAPHQL_EXECUTE_TIMEOUT_SECONDS = 60
 
 _CONNECTION_ERRORS = (GraphqlTransportError, ClientError, TimeoutError, OSError)
 _AUTH_HTTP_STATUSES = {401, 403}
+GRAPHQL_NO_AUTH_URL = "https://dataservice.infinity.iot.carrier.com/graphql-no-auth"
+FETCH_ACCESS_TOKEN_MUTATION = gql(
+    """
+    mutation fetchAccessToken($input: FetchAccessTokenInput!) {
+        fetchAccessToken(input: $input) {
+            success
+            errorMessage
+            data {
+                token_type
+                expires_in
+                access_token
+                scope
+                refresh_token
+            }
+        }
+    }
+"""
+)
 
 
 def _is_auth_transport_error(error: BaseException) -> bool:
@@ -47,25 +66,6 @@ def _is_auth_transport_error(error: BaseException) -> bool:
         authentication-related HTTP status.
     """
     return isinstance(error, TransportServerError) and error.code in _AUTH_HTTP_STATUSES
-
-
-async def _response_json_object(response: Any) -> dict[str, Any]:
-    """Read a JSON object response body when available.
-
-    Args:
-        response: aiohttp-like response object with an async ``json`` method.
-
-    Returns:
-        The decoded JSON object, or an empty object when the body is malformed
-        or is not a JSON object.
-    """
-    try:
-        data = await response.json()
-    except ClientError, TimeoutError, OSError, TypeError, ValueError:
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return data
 
 
 class ApiConnectionGraphql:
@@ -93,6 +93,7 @@ class ApiConnectionGraphql:
         """
         self.username = username
         self.password = password
+        self._auth_lock = Lock()
         if client_session is None:
             self.api_session = ClientSession(raise_for_status=False)
         else:
@@ -112,9 +113,7 @@ class ApiConnectionGraphql:
             CarrierApiAuthError: If the assisted login mutation reports an unsuccessful
                 authentication result.
         """
-        transport = AIOHTTPTransport(
-            url="https://dataservice.infinity.iot.carrier.com/graphql-no-auth", ssl=True
-        )
+        transport = AIOHTTPTransport(url=GRAPHQL_NO_AUTH_URL, ssl=True)
         try:
             async with Client(
                 transport=transport,
@@ -154,6 +153,10 @@ class ApiConnectionGraphql:
                     self.token_type = result["assistedLogin"]["data"]["token_type"]
                     self.access_token = result["assistedLogin"]["data"]["access_token"]
                     self.refresh_token = result["assistedLogin"]["data"]["refresh_token"]
+                    _LOGGER.debug(
+                        "Carrier login succeeded; access token expires at %s",
+                        self.expires_at.isoformat(timespec="seconds"),
+                    )
                     if self.api_websocket is None:
                         self.api_websocket = ApiWebsocket(self)
                 else:
@@ -171,49 +174,90 @@ class ApiConnectionGraphql:
             raise CarrierApiGraphqlError("Carrier authentication GraphQL request failed") from error
 
     async def check_auth_expiration(self) -> None:
-        """Ensure the connection has a valid access token before API use."""
-        if self.refresh_token is None:
-            await self.login()
-        if self.expires_at < datetime.now(UTC):
-            await self.refresh_auth_token()
+        """Ensure the connection has a valid access token before API use.
 
-    async def refresh_auth_token(self) -> None:
-        """Refresh the OAuth access token using the stored refresh token.
+        Checks are serialized so concurrent callers never send the same
+        refresh token twice. When Carrier rejects the refresh token, the
+        connection falls back to one password login. Transient refresh
+        failures keep the stored token for the next attempt.
 
         Raises:
-            CarrierApiAuthError: If Carrier rejects the refresh token as invalid
-                or unauthorized.
-            CarrierApiTokenRefreshError: If token refresh fails before Carrier
-                returns a valid OAuth response.
+            CarrierApiAuthError: If the fallback password login is rejected.
+            CarrierApiTokenRefreshError: If token refresh fails transiently.
         """
-        url = "https://sso.carrier.com/oauth2/default/v1/token"
-        json_body = {
-            "client_id": "0oa1ce7hwjuZbfOMB4x7",
-            "grant_type": "refresh_token",
-            "refresh_token": self.refresh_token,
-            "scope": "offline_access",
-        }
-        response: Any | None = None
+        async with self._auth_lock:
+            if self.refresh_token is None:
+                await self.login()
+            if self.expires_at < datetime.now(UTC):
+                try:
+                    await self.refresh_auth_token()
+                except CarrierApiAuthError:
+                    _LOGGER.info("Carrier refresh token was rejected; logging in again")
+                    self.refresh_token = None
+                    await self.login()
+
+    async def refresh_auth_token(self) -> None:
+        """Refresh the access token through Carrier's ``fetchAccessToken`` mutation.
+
+        Carrier accounts may get tokens from Okta or from Microsoft Entra
+        External ID. Carrier's GraphQL service forwards the refresh to
+        whichever identity provider issued the account's tokens, so the
+        library does not need to know which one an account uses.
+
+        Raises:
+            CarrierApiAuthError: If Carrier rejects the refresh token.
+            CarrierApiTokenRefreshError: If the refresh request fails or
+                returns a malformed token payload.
+        """
+        transport = AIOHTTPTransport(url=GRAPHQL_NO_AUTH_URL, ssl=True)
         try:
-            response = await self.api_session.post(url=url, data=json_body)
-            response.raise_for_status()
-            data = await response.json()
-        except ClientResponseError as error:
-            data = {} if response is None else await _response_json_object(response)
-            if error.status in {401, 403} or (
-                error.status == 400 and data.get("error") == "invalid_grant"
-            ):
+            async with Client(
+                transport=transport,
+                fetch_schema_from_transport=False,
+            ) as session:
+                result = await session.execute(
+                    FETCH_ACCESS_TOKEN_MUTATION,
+                    variable_values={
+                        "input": {"username": self.username, "refreshToken": self.refresh_token}
+                    },
+                    operation_name="fetchAccessToken",
+                )
+        except TransportQueryError as error:
+            raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
+        except _CONNECTION_ERRORS as error:
+            if _is_auth_transport_error(error):
                 raise CarrierApiAuthError("Carrier token refresh was rejected") from error
             raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
-        except (ClientError, TimeoutError, OSError, TypeError, ValueError) as error:
+        except GraphQLError as error:
             raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
+
+        response = result.get("fetchAccessToken") if isinstance(result, dict) else None
+        if not isinstance(response, dict):
+            raise CarrierApiTokenRefreshError("Carrier token refresh failed")
+        if not response.get("success"):
+            _LOGGER.debug("Carrier token refresh was rejected: %s", response.get("errorMessage"))
+            raise CarrierApiAuthError("Carrier token refresh was rejected", payload=response)
+
+        data = response.get("data")
+        if not isinstance(data, dict):
+            raise CarrierApiTokenRefreshError("Carrier token refresh failed")
+        previous_refresh_token = self.refresh_token
         try:
-            self.expires_at = datetime.now(UTC) + timedelta(seconds=data["expires_in"])
-            self.token_type = data["token_type"]
-            self.access_token = data["access_token"]
-            self.refresh_token = data["refresh_token"]
+            expires_at = datetime.now(UTC) + timedelta(seconds=data["expires_in"])
+            token_type = data["token_type"]
+            access_token = data["access_token"]
         except (KeyError, TypeError) as error:
             raise CarrierApiTokenRefreshError("Carrier token refresh failed") from error
+        self.expires_at = expires_at
+        self.token_type = token_type
+        self.access_token = access_token
+        # Okta keeps the refresh token; Entra rotates it.
+        self.refresh_token = data.get("refresh_token") or previous_refresh_token
+        _LOGGER.debug(
+            "Carrier token refresh succeeded; access token expires at %s, refresh token %s",
+            self.expires_at.isoformat(timespec="seconds"),
+            "unchanged" if self.refresh_token == previous_refresh_token else "rotated",
+        )
 
     async def authed_query(
         self, operation_name: str, query: GraphQLRequest, variable_values: dict[str, Any]
