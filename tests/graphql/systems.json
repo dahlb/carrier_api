@@ -27,7 +27,8 @@
             "oat":"30",
             "odu":{
                "type":"ac2stgeverest",
-               "opstat":"off"
+               "opstat":"off",
+               "lockactive":"off"
             },
             "filtrlvl":"0",
             "idu":{
@@ -35,7 +36,8 @@
                "opstat":"low",
                "cfm":"1239",
                "statpress":"1.399999976158142",
-               "blwrpm":"1224"
+               "blwrpm":"1224",
+               "lockoutactive":"on"
             },
             "vent":"None",
             "ventlvl":100,

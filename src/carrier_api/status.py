@@ -9,6 +9,30 @@ from .const import ActivityTypes, FanModes, SystemModes, TemperatureUnits
 from .util import safely_get_json_value
 
 
+def _lockout_active(status_unit_json: dict[str, Any]) -> bool | None:
+    """Read whether a unit reports an active equipment lockout.
+
+    Indoor units report ``lockoutactive`` and outdoor units report
+    ``lockactive``. GraphQL sends ``"off"`` when no lockout is active, while
+    websocket messages may send booleans. The value Carrier sends during a
+    lockout has not been observed, so anything other than a known off value
+    counts as active rather than hiding a fault.
+
+    Args:
+        status_unit_json: Raw ``idu`` or ``odu`` object from the Carrier
+            status response.
+
+    Returns:
+        ``True`` or ``False`` when the unit reports a lockout flag, otherwise
+        ``None``.
+    """
+    for key in ("lockoutactive", "lockactive"):
+        value = safely_get_json_value(status_unit_json, key)
+        if value is not None:
+            return str(value).lower() not in ("off", "false", "0")
+    return None
+
+
 class StatusUnit:
     """Runtime status details for a Carrier indoor or outdoor unit.
 
@@ -47,6 +71,7 @@ class StatusUnit:
             status_unit_json, "suctsupheat", float
         )
         self.line_voltage: int | None = safely_get_json_value(status_unit_json, "linevolt", int)
+        self.lockout_active: bool | None = _lockout_active(status_unit_json)
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dictionary representation of unit runtime details.
@@ -66,6 +91,7 @@ class StatusUnit:
             "suction_temperature": self.suction_temperature,
             "suction_superheat": self.suction_superheat,
             "line_voltage": self.line_voltage,
+            "lockout_active": self.lockout_active,
         }
         return {key: value for key, value in values.items() if value is not None}
 

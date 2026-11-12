@@ -18,7 +18,7 @@ from carrier_api import (
 )
 from carrier_api.config import ConfigZone, ConfigZoneActivity, active_schedule_periods
 from carrier_api.const import ActivityTypes, FanModes, SystemModes
-from carrier_api.status import StatusZone
+from carrier_api.status import StatusUnit, StatusZone
 from carrier_api.util import safely_get_json_value
 
 
@@ -247,6 +247,7 @@ def test_status_modes_zone_conditioning_and_serialization(
     assert status.outdoor_unit.as_dict() == {
         "type": "ac2stgeverest",
         "operational_status": "off",
+        "lockout_active": False,
     }
     idu_without_airflow = {key: value for key, value in raw_status["idu"].items() if key != "cfm"}
     odu_with_airflow = Status(
@@ -272,7 +273,12 @@ def test_status_modes_zone_conditioning_and_serialization(
         "airflow_cfm": 1239,
         "static_pressure": pytest.approx(1.399999976158142),
         "blower_rpm": 1224,
+        "lockout_active": True,
     }
+    assert StatusUnit({"lockactive": True}).lockout_active is True
+    assert StatusUnit({"lockoutactive": False}).lockout_active is False
+    assert StatusUnit({"opstat": "off"}).lockout_active is None
+    assert StatusUnit({"lockactive": "active"}).lockout_active is True
     assert repr(status.zones[0]) == str(status.zones[0].as_dict())
 
     cool_zone = StatusZone({**raw_status["zones"][0], "zoneconditioning": "active_cool"})
@@ -793,6 +799,7 @@ def test_outdoor_unit_maps_diagnostic_refrigerant_and_electrical_readings(
         "suction_temperature": 78,
         "suction_superheat": 4.65234375,
         "line_voltage": 246,
+        "lockout_active": False,
     }
 
 
