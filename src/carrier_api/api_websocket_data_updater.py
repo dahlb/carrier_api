@@ -178,9 +178,19 @@ class WebsocketDataUpdater:
                             _timestamp = activity.pop("timestamp", None)
                             _zone_configuration_id = activity.pop("zoneConfigurationId", None)
                             _fan_setting_id = activity.pop("fanSettingId", None)
-                            stale_activity = find_by_id(stale_zone["activities"], activity["id"])
+                            # Every activity of a zone carries the zone's id, so match on type.
+                            stale_activity = next(
+                                (
+                                    stale
+                                    for stale in stale_zone["activities"]
+                                    if stale.get("type") == activity.get("type")
+                                ),
+                                None,
+                            )
                             if stale_activity is not None:
                                 always_merger.merge(stale_activity, activity)
+                            else:
+                                stale_zone["activities"].append(activity)
                         always_merger.merge(stale_zone, zone)
                 merged_config = always_merger.merge(config_raw, websocket_message_json)
                 system.config = Config(merged_config)
