@@ -622,3 +622,43 @@ async def test_config_message_that_fails_to_parse_leaves_config_untouched(
 
     assert carrier_system.config.as_dict() == original_config_payload
     assert "bogus" not in json.dumps(carrier_system.config.raw)
+
+
+@pytest.mark.asyncio
+async def test_config_message_updates_the_activity_of_the_same_type(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+) -> None:
+    """Merge an activity update into the activity of its type, not the first of the zone.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+    """
+    zone = carrier_system.config.raw["zones"][0]
+    before = {activity["type"]: dict(activity) for activity in zone["activities"]}
+    assert zone["activities"][0]["type"] != "home"
+    message = json.dumps(
+        {
+            "messageType": "InfinityConfig",
+            "deviceId": "SERIALXXX",
+            "zones": [
+                {
+                    "id": zone["id"],
+                    "activities": [{"id": zone["id"], "type": "home", "htsp": "61", "clsp": "79"}],
+                }
+            ],
+        }
+    )
+
+    await data_updater.message_handler(message)
+
+    after = {
+        activity["type"]: activity
+        for activity in carrier_system.config.raw["zones"][0]["activities"]
+    }
+    assert set(after) == set(before)
+    assert after["home"]["htsp"] == "61"
+    assert after["home"]["clsp"] == "79"
+    for activity_type in set(before) - {"home"}:
+        assert after[activity_type] == before[activity_type]
