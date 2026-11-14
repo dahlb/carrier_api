@@ -409,6 +409,7 @@ class ApiConnectionGraphql:
                     type
                     opstat
                     iducfm
+                    lockactive
                   }
                   filtrlvl
                   idu {
@@ -417,6 +418,7 @@ class ApiConnectionGraphql:
                     cfm
                     statpress
                     blwrpm
+                    lockoutactive
                   }
                   vent
                   ventlvl
