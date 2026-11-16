@@ -21,6 +21,9 @@ id = "check-yaml"
 id = "check-toml"
 
 [[repos.hooks]]
+id = "check-json"
+
+[[repos.hooks]]
 id = "check-added-large-files"
 
 [[repos]]

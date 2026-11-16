@@ -185,6 +185,7 @@ max-complexity = 25
 convention = "google"
 
 [tool.codespell]
+# hass: shorthand for Home Assistant used throughout this codebase.
 ignore-words-list = "hass"
 
 [tool.pytest.ini_options]
@@ -199,6 +200,16 @@ addopts = """
 """
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Silences pytest-asyncio's own PytestDeprecationWarning about this
+# option being unset; without it, filterwarnings below turns that
+# warning into a collection-time error before any test can run.
+asyncio_default_fixture_loop_scope = "function"
+# Surface latent deprecations (e.g. bool(NotImplemented), which raises
+# TypeError on 3.14+) while they are still warnings, before they become
+# hard errors in a future Python or dependency release.
+filterwarnings = [
+    "error::DeprecationWarning",
+]
 
 [tool.coverage.run]
 branch = true
