@@ -10,7 +10,7 @@ The process is straight-forward.
    - Add or update deterministic pytest coverage and fixture data.
    - Run `scripts/live_smoke_test` against a live Carrier account when practical.
    - Update `src/carrier_api/live_smoke_test.py` only when the default smoke-test flow should cover a new reusable live API path.
-   - Keep one-off local probe edits out of the final PR, and turn useful live output into stored fixtures or pytest coverage.
+   - Keep one-off local probe edits out of the final PR, and turn useful live output into stored fixtures or pytest coverage, being sure to remove PII like MAC addresses and serial numbers.
  - Create a Pull Request against the [**main**](https://github.com/dahlb/carrier_api/tree/main) branch.
 
 ## Issues (Features/Bugs)
