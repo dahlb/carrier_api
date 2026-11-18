@@ -1829,9 +1829,7 @@ async def test_set_system_vacation_sends_only_system_flag(
     """System Vacation toggles use the public API and preserve dates/setpoints."""
     response = await connection.set_system_vacation("ABC123", enabled)
 
-    assert connection.config_updates == [
-        {"input": {"serial": "ABC123", "vacat": expected}}
-    ]
+    assert connection.config_updates == [{"input": {"serial": "ABC123", "vacat": expected}}]
     assert response == {
         "ok": True,
         "variables": {"input": {"serial": "ABC123", "vacat": expected}},
