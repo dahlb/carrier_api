@@ -88,8 +88,10 @@ class ApiConnectionGraphql:
         Args:
             username: Carrier account username.
             password: Carrier account password.
-            client_session: Optional aiohttp session to reuse for token refresh
-                and websocket operations. A new session is created when omitted.
+            client_session: Optional aiohttp session to reuse. The websocket
+                connects through it, and GraphQL requests share its connection
+                pool (see ``_graphql_transport``). A new session is created
+                when omitted.
         """
         self.username = username
         self.password = password
@@ -98,6 +100,36 @@ class ApiConnectionGraphql:
             self.api_session = ClientSession(raise_for_status=False)
         else:
             self.api_session = client_session
+
+    def _graphql_transport(
+        self, url: str, headers: dict[str, str] | None = None
+    ) -> AIOHTTPTransport:
+        """Return a gql transport that shares ``api_session``'s connection pool.
+
+        gql's ``AIOHTTPTransport`` cannot take an existing ``ClientSession``; it
+        opens its own for every connect. Handing it ``api_session``'s connector
+        with ``connector_owner=False`` makes that per-request session a thin
+        wrapper over the shared pool (keep-alive connections, TLS setup and
+        connection limits), and keeps gql from closing the connector when the
+        request finishes. Without an open connector, gql falls back to its own.
+
+        Args:
+            url: GraphQL endpoint URL.
+            headers: Optional HTTP headers for the request.
+
+        Returns:
+            AIOHTTPTransport: Transport for a single GraphQL client session.
+        """
+        connector = getattr(self.api_session, "connector", None)
+        client_session_args: dict[str, Any] | None = None
+        if connector is not None and not connector.closed:
+            client_session_args = {"connector": connector, "connector_owner": False}
+        return AIOHTTPTransport(
+            url=url,
+            headers=headers,
+            ssl=True,
+            client_session_args=client_session_args,
+        )
 
     async def cleanup(self) -> None:
         """Close the underlying aiohttp session owned by the connection."""
@@ -113,7 +145,7 @@ class ApiConnectionGraphql:
             CarrierApiAuthError: If the assisted login mutation reports an unsuccessful
                 authentication result.
         """
-        transport = AIOHTTPTransport(url=GRAPHQL_NO_AUTH_URL, ssl=True)
+        transport = self._graphql_transport(GRAPHQL_NO_AUTH_URL)
         try:
             async with Client(
                 transport=transport,
@@ -209,7 +241,7 @@ class ApiConnectionGraphql:
             CarrierApiTokenRefreshError: If the refresh request fails or
                 returns a malformed token payload.
         """
-        transport = AIOHTTPTransport(url=GRAPHQL_NO_AUTH_URL, ssl=True)
+        transport = self._graphql_transport(GRAPHQL_NO_AUTH_URL)
         try:
             async with Client(
                 transport=transport,
@@ -273,10 +305,9 @@ class ApiConnectionGraphql:
             The decoded GraphQL response data.
         """
         await self.check_auth_expiration()
-        transport = AIOHTTPTransport(
-            url="https://dataservice.infinity.iot.carrier.com/graphql",
+        transport = self._graphql_transport(
+            "https://dataservice.infinity.iot.carrier.com/graphql",
             headers={"Authorization": f"{self.token_type} {self.access_token}"},
-            ssl=True,
         )
         try:
             async with Client(
