@@ -1816,3 +1816,23 @@ async def test_every_graphql_request_uses_the_shared_transport(
         GRAPHQL_NO_AUTH_URL,
         "https://dataservice.infinity.iot.carrier.com/graphql",
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("enabled", "expected"),
+    [(True, "on"), (False, "off")],
+)
+async def test_set_system_vacation_sends_only_system_flag(
+    connection: SpyConnection, enabled: bool, expected: str
+) -> None:
+    """System Vacation toggles use the public API and preserve dates/setpoints."""
+    response = await connection.set_system_vacation("ABC123", enabled)
+
+    assert connection.config_updates == [
+        {"input": {"serial": "ABC123", "vacat": expected}}
+    ]
+    assert response == {
+        "ok": True,
+        "variables": {"input": {"serial": "ABC123", "vacat": expected}},
+    }
