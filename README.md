@@ -116,7 +116,7 @@ api = ApiConnectionGraphql(
 )
 ```
 
-The websocket connects through that session, and GraphQL requests share its connection pool: gql builds each request's session on the shared connector without taking ownership of it. `cleanup()` closes the session the connection holds, including one you passed in, so skip `cleanup()` when the session belongs to someone else.
+The websocket connects through that session, and GraphQL requests share its connection pool: gql builds each request's session on the shared connector without taking ownership of it. `cleanup()` stops the websocket tasks but leaves a session you passed in open, so the owner of that session closes it. A session the connection created itself is closed by `cleanup()`.
 
 ## Updating Thermostat Settings
 
@@ -207,6 +207,14 @@ asyncio.run(main())
 ```
 
 Callbacks receive the raw websocket message text. Register `WebsocketDataUpdater.message_handler` first when later callbacks need to read the updated in-memory system state.
+
+If a callback raises `ValueError`, `KeyError`, `TypeError`, `IndexError` or `AttributeError` for a message, the error is logged and the message is dropped; the connection stays open and later callbacks still run. `WebsocketDataUpdater` skips messages for devices and zones that `load_data()` did not return.
+
+When the connection drops, the listener reconnects with exponential backoff and jitter, starting at 1 second and capped at 5 minutes. A connection that stays up for a minute resets the delay. Call `api.api_websocket.stop()`, or `api.cleanup()`, to cancel the listener and heartbeat tasks and close the websocket.
+
+## Authentication
+
+The access token is refreshed 60 seconds before it expires. If Carrier rejects a request with HTTP 401 or 403, the token is refreshed and the request is retried once before `CarrierApiAuthError` is raised. If the refresh token itself is rejected, the connection logs in again with the stored password.
 
 ## Development
 

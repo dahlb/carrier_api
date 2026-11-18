@@ -204,11 +204,12 @@ class WorkflowApiWebsocket(ApiWebsocket):
             workflow_connection: Fake connection used for deterministic workflow tests.
         """
         self.websocket: ClientWebSocketResponse | None = None
-        self.running: bool | None = None
+        self.running = False
         self.async_callbacks: list[AsyncCallback] = []
         self.task_heartbeat = None
         self.task_listener = None
         self.api_connection_graphql = workflow_connection
+        self._connected_at: float | None = None
         workflow_connection.api_websocket = self
 
     async def create_task_heartbeat(self) -> None:

@@ -1,13 +1,24 @@
 """Tests for websocket connection state isolation."""
 
-from collections.abc import AsyncIterator
+import asyncio
+from collections.abc import AsyncIterator, Callable
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 from aiohttp import ClientConnectionError, ClientError, ClientSession, WSMsgType
 import pytest
 
-from carrier_api import ApiConnectionGraphql, ApiWebsocket, CarrierApiWebsocketError
+from carrier_api import (
+    ApiConnectionGraphql,
+    ApiWebsocket,
+    CarrierApiWebsocketError,
+    api_websocket as api_websocket_module,
+)
+from carrier_api.const import (
+    WEBSOCKET_RECONNECT_MAX_DELAY_SECONDS,
+    WEBSOCKET_RECONNECT_MIN_DELAY_SECONDS,
+    WEBSOCKET_STABLE_CONNECTION_SECONDS,
+)
 
 
 class DummyApiConnectionGraphql(ApiConnectionGraphql):
@@ -408,3 +419,339 @@ async def test_listener_raises_websocket_error_messages(
     assert heartbeat_task.cancelled
     assert api_websocket.websocket is None
     assert api_websocket.task_heartbeat is None
+
+
+@pytest.mark.asyncio
+async def test_listener_logs_callback_parse_errors_and_keeps_listening(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Drop a message a callback cannot parse without closing the websocket.
+
+    Args:
+        caplog: Pytest log capture fixture.
+    """
+    websocket = FakeListenerWebsocket(
+        [
+            SimpleNamespace(type=WSMsgType.TEXT, data="bad"),
+            SimpleNamespace(type=WSMsgType.TEXT, data="good"),
+        ]
+    )
+    connection = FakeListenerConnection(websocket)
+    api_websocket = FakeHeartbeatApiWebsocket(connection, FakeHeartbeatTask())
+    received: list[str] = []
+
+    async def parse(message: str) -> None:
+        """Fail on the bad message and record the rest.
+
+        Args:
+            message: Raw websocket text.
+
+        Raises:
+            ValueError: When the message is ``"bad"``.
+        """
+        if message == "bad":
+            raise ValueError("unparsable")
+        received.append(message)
+
+    async def record(message: str) -> None:
+        """Record every message.
+
+        Args:
+            message: Raw websocket text.
+        """
+        received.append(f"second:{message}")
+
+    api_websocket.callback_add(parse)
+    api_websocket.callback_add(record)
+
+    await api_websocket.listener()
+
+    assert received == ["second:bad", "good", "second:good"]
+    assert "callback failed to handle message" in caplog.text
+
+
+class ScriptedListenerWebsocket(ApiWebsocket):
+    """Websocket manager whose listener runs scripted outcomes."""
+
+    def __init__(self, outcomes: list[tuple[float, BaseException | None]]) -> None:
+        """Initialize scripted listener outcomes.
+
+        Args:
+            outcomes: For each listener call, how long the connection stays up
+                (in fake seconds) and the error to raise, if any.
+        """
+        super().__init__(DummyApiConnectionGraphql())
+        self.outcomes = outcomes
+        self.clock = 0.0
+        self.calls = 0
+
+    async def listener(self) -> None:
+        """Run the next scripted outcome.
+
+        Raises:
+            BaseException: When the scripted outcome carries an error.
+        """
+        self.calls += 1
+        uptime, error = self.outcomes.pop(0)
+        self._connected_at = self.clock
+        self.clock += uptime
+        if error is not None:
+            raise error
+
+
+@pytest.fixture
+def scripted_sleep(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[list[float], Callable[[ScriptedListenerWebsocket, int], None]]:
+    """Replace websocket sleeps with a recorder that can stop the loop.
+
+    Args:
+        monkeypatch: Pytest helper for replacing ``sleep`` and the clock.
+
+    Returns:
+        The list of recorded delays and a binder that sets which websocket to
+        stop after a number of sleeps.
+    """
+    delays: list[float] = []
+    state: dict[str, Any] = {}
+
+    async def fake_sleep(delay: float) -> None:
+        """Record the delay, advance the fake clock, and stop when done.
+
+        Args:
+            delay: Requested sleep in seconds.
+        """
+        delays.append(delay)
+        websocket: ScriptedListenerWebsocket = state["websocket"]
+        websocket.clock += delay
+        if len(delays) >= state["limit"]:
+            websocket.running = False
+
+    def bind(websocket: ScriptedListenerWebsocket, limit: int) -> None:
+        """Bind the fake sleep and clock to a websocket.
+
+        Args:
+            websocket: Websocket whose loop is being tested.
+            limit: Number of sleeps after which the loop stops.
+        """
+        state["websocket"] = websocket
+        state["limit"] = limit
+        monkeypatch.setattr(
+            api_websocket_module,
+            "get_running_loop",
+            lambda: SimpleNamespace(time=lambda: websocket.clock),
+        )
+
+    monkeypatch.setattr(api_websocket_module, "sleep", fake_sleep)
+    monkeypatch.setattr(api_websocket_module, "random", lambda: 0.0)
+    return delays, bind
+
+
+@pytest.mark.asyncio
+async def test_loop_listener_backs_off_exponentially_up_to_the_maximum(
+    scripted_sleep: tuple[list[float], Callable[[ScriptedListenerWebsocket, int], None]],
+) -> None:
+    """Wait longer after each failed connection, capped at the maximum delay.
+
+    Args:
+        scripted_sleep: Recorded delays and the loop binder.
+    """
+    delays, bind = scripted_sleep
+    attempts = 12
+    api_websocket = ScriptedListenerWebsocket(
+        [(0.0, CarrierApiWebsocketError("down")) for _ in range(attempts)]
+    )
+    bind(api_websocket, attempts)
+
+    await api_websocket.loop_listener()
+
+    assert delays[:4] == [1, 2, 4, 8]
+    assert max(delays) == WEBSOCKET_RECONNECT_MAX_DELAY_SECONDS
+    assert delays[-1] == WEBSOCKET_RECONNECT_MAX_DELAY_SECONDS
+    assert api_websocket.calls == attempts
+    assert api_websocket.running is False
+
+
+@pytest.mark.asyncio
+async def test_loop_listener_resets_backoff_after_a_stable_connection(
+    scripted_sleep: tuple[list[float], Callable[[ScriptedListenerWebsocket, int], None]],
+) -> None:
+    """Reconnect quickly again once a connection has stayed up.
+
+    Args:
+        scripted_sleep: Recorded delays and the loop binder.
+    """
+    delays, bind = scripted_sleep
+    api_websocket = ScriptedListenerWebsocket(
+        [
+            (0.0, CarrierApiWebsocketError("down")),
+            (0.0, CarrierApiWebsocketError("down")),
+            (0.0, CarrierApiWebsocketError("down")),
+            (WEBSOCKET_STABLE_CONNECTION_SECONDS, None),
+            (0.0, CarrierApiWebsocketError("down")),
+        ]
+    )
+    bind(api_websocket, 5)
+
+    await api_websocket.loop_listener()
+
+    assert delays == [1, 2, 4, WEBSOCKET_RECONNECT_MIN_DELAY_SECONDS, 2]
+
+
+@pytest.mark.asyncio
+async def test_loop_listener_exits_quietly_when_cancelled() -> None:
+    """Stop the reconnect loop when its task is cancelled."""
+    started = asyncio.Event()
+
+    class BlockingListenerWebsocket(ApiWebsocket):
+        """Websocket manager whose listener blocks until cancelled."""
+
+        async def listener(self) -> None:
+            """Block until cancelled."""
+            started.set()
+            await asyncio.Event().wait()
+
+    api_websocket = BlockingListenerWebsocket(DummyApiConnectionGraphql())
+    task = asyncio.create_task(api_websocket.loop_listener())
+    await started.wait()
+
+    task.cancel()
+    await task
+
+    assert api_websocket.running is False
+
+
+class BlockingSendWebsocket:
+    """Websocket whose send blocks until cancelled."""
+
+    def __init__(self) -> None:
+        """Initialize the send-started event."""
+        self.send_started = asyncio.Event()
+
+    async def send_json(self, payload: dict[str, str]) -> None:
+        """Block until cancelled.
+
+        Args:
+            payload: Websocket payload.
+        """
+        self.send_started.set()
+        await asyncio.Event().wait()
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_ends_promptly_when_cancelled_during_send() -> None:
+    """End the heartbeat task at once when cancelled mid-send."""
+    api_websocket = ApiWebsocket(DummyApiConnectionGraphql())
+    websocket = BlockingSendWebsocket()
+    api_websocket.websocket = websocket  # type: ignore[assignment]
+    await api_websocket.create_task_heartbeat()
+    assert api_websocket.task_heartbeat is not None
+    await websocket.send_started.wait()
+
+    api_websocket.task_heartbeat.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(api_websocket.task_heartbeat, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_logs_send_failures_and_keeps_running(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Keep sending keepalives after a failed send.
+
+    Args:
+        monkeypatch: Pytest helper for replacing ``sleep``.
+        caplog: Pytest log capture fixture.
+    """
+    sends = 0
+
+    class FlakySendWebsocket:
+        """Websocket whose first send fails."""
+
+        async def send_json(self, payload: dict[str, str]) -> None:
+            """Fail on the first send.
+
+            Args:
+                payload: Websocket payload.
+
+            Raises:
+                ClientConnectionError: On the first send.
+            """
+            nonlocal sends
+            sends += 1
+            if sends == 1:
+                raise ClientConnectionError("closing")
+
+    async def fake_sleep(_delay: float) -> None:
+        """Stop the heartbeat after the second send.
+
+        Args:
+            _delay: Requested sleep in seconds.
+
+        Raises:
+            asyncio.CancelledError: After the second send.
+        """
+        if sends >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(api_websocket_module, "sleep", fake_sleep)
+    api_websocket = ApiWebsocket(DummyApiConnectionGraphql())
+    api_websocket.websocket = FlakySendWebsocket()  # type: ignore[assignment]
+
+    with pytest.raises(asyncio.CancelledError):
+        await api_websocket.loop_heartbeat()
+
+    assert sends == 2
+    assert "keepalive failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_stop_cancels_tasks_and_closes_websocket() -> None:
+    """Cancel listener and heartbeat tasks and close the open websocket."""
+    api_websocket = ApiWebsocket(DummyApiConnectionGraphql())
+    websocket = FakeListenerWebsocket([])
+    api_websocket.websocket = websocket  # type: ignore[assignment]
+    api_websocket.running = True
+    listener_task = asyncio.create_task(asyncio.Event().wait())
+    heartbeat_task = asyncio.create_task(asyncio.Event().wait())
+    api_websocket.task_listener = listener_task  # type: ignore[assignment]
+    api_websocket.task_heartbeat = heartbeat_task  # type: ignore[assignment]
+
+    await api_websocket.stop()
+
+    assert websocket.closed
+    assert listener_task.cancelled()
+    assert heartbeat_task.cancelled()
+    assert api_websocket.running is False
+    assert api_websocket.websocket is None
+    assert api_websocket.task_listener is None
+    assert api_websocket.task_heartbeat is None
+
+    await api_websocket.stop()
+
+
+@pytest.mark.asyncio
+async def test_stop_ends_a_running_listener_loop() -> None:
+    """Stop a real listener loop task started with ``create_task_listener``."""
+    started = asyncio.Event()
+
+    class BlockingListenerWebsocket(ApiWebsocket):
+        """Websocket manager whose listener blocks until cancelled."""
+
+        async def listener(self) -> None:
+            """Block until cancelled."""
+            started.set()
+            await asyncio.Event().wait()
+
+    api_websocket = BlockingListenerWebsocket(DummyApiConnectionGraphql())
+    await api_websocket.create_task_listener()
+    task = api_websocket.task_listener
+    assert task is not None
+    await started.wait()
+
+    await api_websocket.stop()
+
+    assert task.done()
+    assert api_websocket.running is False
