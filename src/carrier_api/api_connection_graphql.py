@@ -68,6 +68,24 @@ def _is_auth_transport_error(error: BaseException) -> bool:
     return isinstance(error, TransportServerError) and error.code in _AUTH_HTTP_STATUSES
 
 
+class _SharedPoolAIOHTTPTransport(AIOHTTPTransport):
+    """``AIOHTTPTransport`` that also closes its session when it doesn't own the connector.
+
+    gql's ``AIOHTTPTransport.close()`` skips ``session.close()`` entirely when
+    ``connector_owner`` is False. The request session is then garbage-collected
+    unclosed, and aiohttp reports "Unclosed client session" through the event
+    loop's exception handler on every request. Closing a session that doesn't
+    own its connector only detaches it, so the shared pool stays open.
+    """
+
+    async def close(self) -> None:
+        """Close the transport, then its request session if gql left it open."""
+        session = self.session
+        await super().close()
+        if session is not None and not session.closed:
+            await session.close()
+
+
 class ApiConnectionGraphql:
     """Async Carrier GraphQL API connection with token and websocket support."""
 
@@ -111,7 +129,9 @@ class ApiConnectionGraphql:
         with ``connector_owner=False`` makes that per-request session a thin
         wrapper over the shared pool (keep-alive connections, TLS setup and
         connection limits), and keeps gql from closing the connector when the
-        request finishes. Without an open connector, gql falls back to its own.
+        request finishes. The transport still closes that request session (see
+        ``_SharedPoolAIOHTTPTransport``). Without an open connector, gql falls back
+        to its own.
 
         Args:
             url: GraphQL endpoint URL.
@@ -124,7 +144,7 @@ class ApiConnectionGraphql:
         client_session_args: dict[str, Any] | None = None
         if connector is not None and not connector.closed:
             client_session_args = {"connector": connector, "connector_owner": False}
-        return AIOHTTPTransport(
+        return _SharedPoolAIOHTTPTransport(
             url=url,
             headers=headers,
             ssl=True,
