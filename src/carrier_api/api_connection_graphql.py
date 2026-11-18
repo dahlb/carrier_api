@@ -140,10 +140,12 @@ class ApiConnectionGraphql:
             username: Carrier account username.
             password: Carrier account password.
             client_session: Optional aiohttp session to reuse. The websocket
-                connects through it, and GraphQL requests share its connection
-                pool (see ``_graphql_transport``). A new session is created
-                when omitted. ``cleanup`` only closes a session this
-                connection created, never one passed in here.
+                connects through it. GraphQL requests only share the
+                connection pool of a session this connection created (see
+                ``_graphql_transport``); a session passed in here is not
+                borrowed for them. A new session is created when omitted.
+                ``cleanup`` only closes a session this connection created,
+                never one passed in here.
         """
         self.username = username
         self.password = password
@@ -162,14 +164,19 @@ class ApiConnectionGraphql:
     def _graphql_transport(
         self, url: str, headers: dict[str, str] | None = None
     ) -> AIOHTTPTransport:
-        """Return a gql transport that shares ``api_session``'s connection pool.
+        """Return a gql transport, sharing ``api_session``'s pool when this connection owns it.
 
         gql's ``AIOHTTPTransport`` cannot take an existing ``ClientSession``; it
-        opens its own for every connect. Handing it ``api_session``'s connector
-        with ``connector_owner=False`` makes that per-request session a thin
-        wrapper over the shared pool (keep-alive connections, TLS setup and
-        connection limits), and keeps gql from closing the connector when the
-        request finishes. Without an open connector, gql falls back to its own.
+        opens its own for every connect. When this connection created
+        ``api_session``, handing gql its connector with ``connector_owner=False``
+        makes that per-request session a thin wrapper over the shared pool
+        (keep-alive connections, TLS setup and connection limits), and keeps
+        gql from closing the connector when the request finishes.
+
+        A caller-provided session is never borrowed this way: its connector
+        belongs to the caller, so gql opens its own session instead. gql also
+        falls back to its own session when the owned session has no open
+        connector.
 
         Args:
             url: GraphQL endpoint URL.
@@ -178,10 +185,11 @@ class ApiConnectionGraphql:
         Returns:
             AIOHTTPTransport: Transport for a single GraphQL client session.
         """
-        connector = getattr(self.api_session, "connector", None)
         client_session_args: dict[str, Any] | None = None
-        if connector is not None and not connector.closed:
-            client_session_args = {"connector": connector, "connector_owner": False}
+        if self._owns_session:
+            connector = getattr(self.api_session, "connector", None)
+            if connector is not None and not connector.closed:
+                client_session_args = {"connector": connector, "connector_owner": False}
         return AIOHTTPTransport(
             url=url,
             headers=headers,

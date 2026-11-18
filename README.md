@@ -116,7 +116,7 @@ api = ApiConnectionGraphql(
 )
 ```
 
-The websocket connects through that session, and GraphQL requests share its connection pool: gql builds each request's session on the shared connector without taking ownership of it. `cleanup()` stops the websocket tasks but leaves a session you passed in open, so the owner of that session closes it. A session the connection created itself is closed by `cleanup()`.
+The websocket connects through that session. GraphQL requests do not borrow a session you pass in: gql opens its own session for each request. When the connection creates its own session, GraphQL requests share that session's connection pool instead. `cleanup()` stops the websocket tasks but leaves a session you passed in open, so the owner of that session closes it. A session the connection created itself is closed by `cleanup()`.
 
 ## Updating Thermostat Settings
 

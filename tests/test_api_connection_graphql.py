@@ -1671,14 +1671,34 @@ async def test_set_program_day_surfaces_a_stale_etag(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
-async def test_graphql_transport_shares_the_session_connection_pool() -> None:
-    """Build GraphQL transports on the session's connector without letting gql close it."""
-    session = ClientSession()
-    try:
-        connection = ApiConnectionGraphql(
-            username="user@example.com", password="password", client_session=session
-        )
+async def test_graphql_transport_shares_the_owned_session_connection_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Build GraphQL transports on an owned session's connector without letting gql close it.
 
+    Args:
+        monkeypatch: Pytest helper for capturing the session the connection creates.
+    """
+    created: list[ClientSession] = []
+    real_client_session = ClientSession
+
+    def session_factory(**kwargs: Any) -> ClientSession:
+        """Create and record a real session.
+
+        Args:
+            kwargs: ``ClientSession`` keyword arguments.
+
+        Returns:
+            A real aiohttp session.
+        """
+        new_session = real_client_session(**kwargs)
+        created.append(new_session)
+        return new_session
+
+    monkeypatch.setattr("carrier_api.api_connection_graphql.ClientSession", session_factory)
+    connection = ApiConnectionGraphql(username="user@example.com", password="password")
+    session = created[0]
+    try:
         transport = connection._graphql_transport(
             "https://example.invalid/graphql", headers={"Authorization": "Bearer token"}
         )
@@ -1700,13 +1720,36 @@ async def test_graphql_transport_shares_the_session_connection_pool() -> None:
 
 
 @pytest.mark.asyncio
+async def test_graphql_transport_does_not_borrow_a_provided_session() -> None:
+    """Let gql open its own session rather than borrow a caller-provided connector."""
+    session = ClientSession()
+    try:
+        connection = ApiConnectionGraphql(
+            username="user@example.com", password="password", client_session=session
+        )
+
+        transport = connection._graphql_transport(GRAPHQL_NO_AUTH_URL)
+
+        assert transport.client_session_args is None
+        await transport.connect()
+        assert transport.session is not None
+        assert transport.session.connector is not session.connector
+        await transport.close()
+        assert session.connector is not None
+        assert not session.connector.closed
+    finally:
+        await session.close()
+
+
+@pytest.mark.asyncio
 async def test_graphql_transport_falls_back_without_an_open_connector() -> None:
-    """Let gql open its own session when the connection's session has no open connector."""
+    """Let gql open its own session when the owned session has no open connector."""
     duck_typed = ApiConnectionGraphql(
         username="user@example.com",
         password="password",
         client_session=cast("ClientSession", FakeSession()),
     )
+    duck_typed._owns_session = True
     assert duck_typed._graphql_transport(GRAPHQL_NO_AUTH_URL).client_session_args is None
 
     closed_session = ClientSession()
@@ -1714,6 +1757,7 @@ async def test_graphql_transport_falls_back_without_an_open_connector() -> None:
     closed = ApiConnectionGraphql(
         username="user@example.com", password="password", client_session=closed_session
     )
+    closed._owns_session = True
     assert closed._graphql_transport(GRAPHQL_NO_AUTH_URL).client_session_args is None
 
 
