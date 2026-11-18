@@ -104,6 +104,20 @@ To get both activity sources together, use `ConfigZone.as_dict(status_zone)["cur
 
 `System.as_dict()` includes `supported_hvac_capabilities` and passes status-zone context into config serialization so each zone dictionary includes `current_activity.from_schedule` and `current_activity.from_status`.
 
+### Reusing an aiohttp session
+
+Pass `client_session` to share an existing `aiohttp.ClientSession`, for example Home Assistant's shared session:
+
+```python
+api = ApiConnectionGraphql(
+    username="your-account@example.com",
+    password="your-password",
+    client_session=session,
+)
+```
+
+The websocket connects through that session, and GraphQL requests share its connection pool: gql builds each request's session on the shared connector without taking ownership of it. `cleanup()` closes the session the connection holds, including one you passed in, so skip `cleanup()` when the session belongs to someone else.
+
 ## Updating Thermostat Settings
 
 Mutation helpers send Carrier configuration updates and then request websocket reconciliation when a websocket manager is available.

@@ -11,7 +11,7 @@ import pytest
 
 import carrier_api
 from carrier_api import errors
-from carrier_api.api_connection_graphql import ApiConnectionGraphql
+from carrier_api.api_connection_graphql import GRAPHQL_NO_AUTH_URL, ApiConnectionGraphql
 from carrier_api.const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from carrier_api.system import System
 
@@ -1419,3 +1419,103 @@ async def test_set_program_day_surfaces_a_stale_etag(monkeypatch: pytest.MonkeyP
         await connection.set_program_day("SERIAL", "1", "0", PROGRAM_DAY_PERIODS, "STALE")
 
     assert error.value.__cause__ is transport_error
+
+
+@pytest.mark.asyncio
+async def test_graphql_transport_shares_the_session_connection_pool() -> None:
+    """Build GraphQL transports on the session's connector without letting gql close it."""
+    session = ClientSession()
+    try:
+        connection = ApiConnectionGraphql(
+            username="user@example.com", password="password", client_session=session
+        )
+
+        transport = connection._graphql_transport(
+            "https://example.invalid/graphql", headers={"Authorization": "Bearer token"}
+        )
+
+        assert transport.client_session_args == {
+            "connector": session.connector,
+            "connector_owner": False,
+        }
+        assert transport.headers == {"Authorization": "Bearer token"}
+        await transport.connect()
+        assert transport.session is not None
+        assert transport.session.connector is session.connector
+        await transport.close()
+        assert session.connector is not None
+        assert not session.connector.closed
+        assert not session.closed
+    finally:
+        await session.close()
+
+
+@pytest.mark.asyncio
+async def test_graphql_transport_falls_back_without_an_open_connector() -> None:
+    """Let gql open its own session when the connection's session has no open connector."""
+    duck_typed = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    assert duck_typed._graphql_transport(GRAPHQL_NO_AUTH_URL).client_session_args is None
+
+    closed_session = ClientSession()
+    await closed_session.close()
+    closed = ApiConnectionGraphql(
+        username="user@example.com", password="password", client_session=closed_session
+    )
+    assert closed._graphql_transport(GRAPHQL_NO_AUTH_URL).client_session_args is None
+
+
+@pytest.mark.asyncio
+async def test_every_graphql_request_uses_the_shared_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Build login, token refresh and authenticated query transports through one helper.
+
+    Args:
+        monkeypatch: Pytest helper for replacing the GraphQL client and transport helper.
+    """
+    built: list[str] = []
+    original = ApiConnectionGraphql._graphql_transport
+
+    def recording_transport(
+        self: ApiConnectionGraphql, url: str, headers: dict[str, str] | None = None
+    ) -> Any:
+        """Record the endpoint and delegate to the real helper.
+
+        Args:
+            self: Connection building the transport.
+            url: GraphQL endpoint URL.
+            headers: Optional HTTP headers.
+
+        Returns:
+            The transport built by the real helper.
+        """
+        built.append(url)
+        return original(self, url, headers)
+
+    monkeypatch.setattr(ApiConnectionGraphql, "_graphql_transport", recording_transport)
+    monkeypatch.setattr(
+        "carrier_api.api_connection_graphql.Client",
+        graphql_client_double(error=ClientConnectionError("offline")),
+    )
+    connection = _refresh_connection()
+
+    with pytest.raises(errors.CarrierApiConnectionError):
+        await connection.login()
+    with pytest.raises(errors.CarrierApiTokenRefreshError):
+        await connection.refresh_auth_token()
+
+    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", FakeGraphQLClient)
+    connection.token_type = "Bearer"
+    connection.access_token = "token"
+    connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
+    await connection.authed_query("getUser", gql("query getUser { user { username } }"), {})
+
+    assert built == [
+        GRAPHQL_NO_AUTH_URL,
+        GRAPHQL_NO_AUTH_URL,
+        "https://dataservice.infinity.iot.carrier.com/graphql",
+    ]
