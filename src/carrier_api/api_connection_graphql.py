@@ -1024,9 +1024,7 @@ class ApiConnectionGraphql:
             "updateInfinityProgramDay", UPDATE_INFINITY_PROGRAM_DAY_MUTATION, variables
         )
 
-    async def set_system_vacation(
-        self, system_serial: str, enabled: bool
-    ) -> dict[str, Any]:
+    async def set_system_vacation(self, system_serial: str, enabled: bool) -> dict[str, Any]:
         """Enable or disable the Carrier system-wide Vacation flag.
 
         This changes the system-level Vacation state, not a per-zone hold.
