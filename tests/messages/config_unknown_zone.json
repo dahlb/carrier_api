@@ -1,0 +1,16 @@
+{
+   "zones":[
+      {
+         "timestamp":"2025-03-14T01:03:11.760Z",
+         "id":"9",
+         "holdActivity":"away"
+      },
+      {
+         "timestamp":"2025-03-14T01:03:11.760Z",
+         "id":"1",
+         "holdActivity":"manual"
+      }
+   ],
+   "messageType":"InfinityConfig",
+   "deviceId":"SERIALXXX"
+}

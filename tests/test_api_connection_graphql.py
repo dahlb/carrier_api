@@ -12,7 +12,13 @@ import pytest
 import carrier_api
 from carrier_api import errors
 from carrier_api.api_connection_graphql import GRAPHQL_NO_AUTH_URL, ApiConnectionGraphql
-from carrier_api.const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
+from carrier_api.const import (
+    TOKEN_REFRESH_MARGIN_SECONDS,
+    ActivityTypes,
+    FanModes,
+    HeatSourceTypes,
+    SystemModes,
+)
 from carrier_api.system import System
 
 
@@ -312,8 +318,8 @@ async def test_login_failure_uses_readable_message_and_preserves_payload(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_closes_provided_session() -> None:
-    """Close the underlying HTTP session."""
+async def test_cleanup_leaves_provided_session_open() -> None:
+    """Leave a caller-provided HTTP session open on cleanup."""
     session = FakeSession()
     connection = ApiConnectionGraphql(
         username="user@example.com",
@@ -323,7 +329,86 @@ async def test_cleanup_closes_provided_session() -> None:
 
     await connection.cleanup()
 
-    assert session.closed
+    assert not session.closed
+
+
+@pytest.mark.asyncio
+async def test_cleanup_closes_owned_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Close the HTTP session the connection created itself.
+
+    Args:
+        monkeypatch: Pytest helper for replacing ``ClientSession``.
+    """
+    created: list[FakeSession] = []
+
+    def session_factory(**_kwargs: Any) -> FakeSession:
+        """Create and record a fake session.
+
+        Args:
+            _kwargs: ``ClientSession`` keyword arguments.
+
+        Returns:
+            A fake session.
+        """
+        session = FakeSession()
+        created.append(session)
+        return session
+
+    monkeypatch.setattr("carrier_api.api_connection_graphql.ClientSession", session_factory)
+    connection = ApiConnectionGraphql(username="user@example.com", password="password")
+
+    await connection.cleanup()
+
+    assert len(created) == 1
+    assert created[0].closed
+
+
+@pytest.mark.asyncio
+async def test_cleanup_stops_websocket() -> None:
+    """Stop the websocket tasks before closing the session."""
+
+    class StoppableWebsocket:
+        """Websocket manager double that records stop calls."""
+
+        def __init__(self) -> None:
+            """Initialize stop state."""
+            self.stopped = False
+
+        async def stop(self) -> None:
+            """Record the stop request."""
+            self.stopped = True
+
+    connection = ApiConnectionGraphql(
+        username="user@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    websocket = StoppableWebsocket()
+    connection.api_websocket = websocket  # type: ignore[assignment]
+
+    await connection.cleanup()
+
+    assert websocket.stopped
+
+
+def test_token_state_is_instance_scoped() -> None:
+    """Keep token state on each connection rather than shared class attributes."""
+    first = ApiConnectionGraphql(
+        username="first@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+    second = ApiConnectionGraphql(
+        username="second@example.com",
+        password="password",
+        client_session=cast("ClientSession", FakeSession()),
+    )
+
+    first.access_token = "first-token"
+
+    assert second.access_token is None
+    assert "access_token" not in vars(ApiConnectionGraphql)
+    assert "expires_at" not in vars(ApiConnectionGraphql)
 
 
 @pytest.mark.asyncio
@@ -361,6 +446,7 @@ async def test_cleanup_wraps_session_close_errors(
         password="password",
         client_session=cast("ClientSession", FailingCloseSession()),
     )
+    connection._owns_session = True
 
     with pytest.raises(errors.CarrierApiConnectionError) as error:
         await connection.cleanup()
@@ -875,32 +961,111 @@ async def test_authed_query_wraps_connection_errors(
     assert error.value.__cause__ is transport_error
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("status", [401, 403])
-async def test_authed_query_maps_auth_transport_errors_to_auth_error(
-    monkeypatch: pytest.MonkeyPatch,
-    status: int,
-) -> None:
-    """Raise auth errors when GraphQL transport reports auth HTTP statuses.
+class SequencedGraphQLClient:
+    """GraphQL client double that replays queued results or errors in order."""
+
+    outcomes: ClassVar[list[dict[str, Any] | BaseException]] = []
+    authorizations: ClassVar[list[str | None]] = []
+
+    def __init__(self, *, transport: Any, **_kwargs: Any) -> None:
+        """Capture the Authorization header sent with the request.
+
+        Args:
+            transport: gql transport for the request.
+            _kwargs: Other gql client keyword arguments.
+        """
+        headers = getattr(transport, "headers", None) or {}
+        SequencedGraphQLClient.authorizations.append(headers.get("Authorization"))
+
+    async def __aenter__(self) -> Self:
+        """Enter the fake session context.
+
+        Returns:
+            The fake GraphQL session.
+        """
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        """Exit the fake session context.
+
+        Args:
+            args: Context manager exception details.
+        """
+
+    async def execute(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return or raise the next queued outcome.
+
+        Args:
+            args: Positional execute arguments.
+            kwargs: Keyword execute arguments.
+
+        Returns:
+            The next queued GraphQL result.
+
+        Raises:
+            BaseException: When the next queued outcome is an error.
+        """
+        outcome = SequencedGraphQLClient.outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+class TokenRotatingConnection(ApiConnectionGraphql):
+    """Connection whose refresh issues a new access token without the network."""
+
+    def __init__(self) -> None:
+        """Initialize a connection holding a still-valid access token."""
+        super().__init__(
+            username="user@example.com",
+            password="password",
+            client_session=cast("ClientSession", FakeSession()),
+        )
+        self.refresh_token = "refresh"
+        self.token_type = "Bearer"
+        self.access_token = "access-1"
+        self.expires_at = datetime.now(UTC) + timedelta(hours=1)
+        self.refresh_count = 0
+
+    async def refresh_auth_token(self) -> None:
+        """Issue the next access token and extend its expiry."""
+        self.refresh_count += 1
+        self.access_token = f"access-{self.refresh_count + 1}"
+        self.expires_at = datetime.now(UTC) + timedelta(hours=1)
+
+
+@pytest.fixture
+def sequenced_client(monkeypatch: pytest.MonkeyPatch) -> type[SequencedGraphQLClient]:
+    """Install a GraphQL client double with an empty outcome queue.
 
     Args:
         monkeypatch: Pytest helper for replacing the GraphQL client.
+
+    Returns:
+        The client double class whose ``outcomes`` the test fills.
+    """
+    SequencedGraphQLClient.outcomes = []
+    SequencedGraphQLClient.authorizations = []
+    monkeypatch.setattr("carrier_api.api_connection_graphql.Client", SequencedGraphQLClient)
+    return SequencedGraphQLClient
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+async def test_authed_query_maps_auth_transport_errors_to_auth_error(
+    sequenced_client: type[SequencedGraphQLClient],
+    status: int,
+) -> None:
+    """Raise auth errors when Carrier still rejects the request after a refresh.
+
+    Args:
+        sequenced_client: GraphQL client double with queued outcomes.
         status: HTTP status raised by the fake GraphQL transport.
     """
+    first_error = TransportServerError("unauthorized", code=status)
     transport_error = TransportServerError("unauthorized", code=status)
-
-    monkeypatch.setattr(
-        "carrier_api.api_connection_graphql.Client", graphql_client_double(error=transport_error)
-    )
-    connection = ApiConnectionGraphql(
-        username="user@example.com",
-        password="password",
-        client_session=cast("ClientSession", FakeSession()),
-    )
-    connection.refresh_token = "refresh"
-    connection.token_type = "Bearer"
-    connection.access_token = "access"
-    connection.expires_at = datetime.now(UTC) + timedelta(hours=1)
+    sequenced_client.outcomes = [first_error, transport_error]
+    connection = TokenRotatingConnection()
 
     with pytest.raises(errors.CarrierApiAuthError) as error:
         await connection.authed_query(
@@ -910,6 +1075,90 @@ async def test_authed_query_maps_auth_transport_errors_to_auth_error(
         )
 
     assert error.value.__cause__ is transport_error
+    assert connection.refresh_count == 1
+    assert sequenced_client.authorizations == ["Bearer access-1", "Bearer access-2"]
+
+
+@pytest.mark.asyncio
+async def test_authed_query_refreshes_and_retries_once_after_auth_rejection(
+    sequenced_client: type[SequencedGraphQLClient],
+) -> None:
+    """Refresh a rejected token and retry the operation with the new one.
+
+    Args:
+        sequenced_client: GraphQL client double with queued outcomes.
+    """
+    sequenced_client.outcomes = [
+        TransportServerError("unauthorized", code=401),
+        {"user": {"username": "user@example.com"}},
+    ]
+    connection = TokenRotatingConnection()
+
+    result = await connection.authed_query(
+        operation_name="getUser",
+        query=cast("GraphQLRequest", object()),
+        variable_values={},
+    )
+
+    assert result == {"user": {"username": "user@example.com"}}
+    assert connection.refresh_count == 1
+    assert sequenced_client.authorizations == ["Bearer access-1", "Bearer access-2"]
+
+
+@pytest.mark.asyncio
+async def test_authed_query_does_not_retry_non_auth_errors(
+    sequenced_client: type[SequencedGraphQLClient],
+) -> None:
+    """Leave connection failures to the caller without refreshing or retrying.
+
+    Args:
+        sequenced_client: GraphQL client double with queued outcomes.
+    """
+    sequenced_client.outcomes = [TransportServerError("unavailable", code=503)]
+    connection = TokenRotatingConnection()
+
+    with pytest.raises(errors.CarrierApiConnectionError):
+        await connection.authed_query(
+            operation_name="getUser",
+            query=cast("GraphQLRequest", object()),
+            variable_values={},
+        )
+
+    assert connection.refresh_count == 0
+    assert len(sequenced_client.authorizations) == 1
+
+
+@pytest.mark.asyncio
+async def test_expire_access_token_keeps_a_token_replaced_concurrently() -> None:
+    """Do not expire a token another caller already refreshed."""
+    connection = TokenRotatingConnection()
+    expires_at = connection.expires_at
+
+    await connection._expire_access_token("stale-token")
+
+    assert connection.expires_at == expires_at
+
+
+@pytest.mark.asyncio
+async def test_check_auth_expiration_refreshes_shortly_before_expiry() -> None:
+    """Refresh a token that is about to expire, not only one that already has."""
+    connection = TokenRotatingConnection()
+    connection.expires_at = datetime.now(UTC) + timedelta(seconds=TOKEN_REFRESH_MARGIN_SECONDS / 2)
+
+    await connection.check_auth_expiration()
+
+    assert connection.refresh_count == 1
+
+
+@pytest.mark.asyncio
+async def test_check_auth_expiration_keeps_token_outside_refresh_margin() -> None:
+    """Keep a token that is valid beyond the refresh margin."""
+    connection = TokenRotatingConnection()
+    connection.expires_at = datetime.now(UTC) + timedelta(seconds=TOKEN_REFRESH_MARGIN_SECONDS * 2)
+
+    await connection.check_auth_expiration()
+
+    assert connection.refresh_count == 0
 
 
 @pytest.mark.asyncio

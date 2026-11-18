@@ -34,6 +34,28 @@ def find_by_id(collection: list[dict], item_id: str) -> dict:
     raise ValueError(f"id: {item_id} not found in collection")
 
 
+def find_zone(collection: list[dict], zone_id: str, message_type: str) -> dict | None:
+    """Find a zone in a raw payload, logging and returning ``None`` when absent.
+
+    Carrier can report a zone that was not part of the last GraphQL load, for
+    example one enabled after startup. Such zones are skipped rather than
+    failing the whole message.
+
+    Args:
+        collection: Raw ``zones`` list from a status or config payload.
+        zone_id: Zone identifier from the websocket message.
+        message_type: Message type, used only for logging.
+
+    Returns:
+        The matching zone dictionary, or ``None`` when it is not loaded.
+    """
+    try:
+        return find_by_id(collection, zone_id)
+    except ValueError:
+        _LOGGER.debug("%s for unknown zone %s skipped", message_type, zone_id)
+        return None
+
+
 def unwrap_envelope(websocket_message_json: dict[str, Any]) -> dict[str, Any]:
     """Unwrap a Carrier websocket message delivered inside a ``payload`` envelope.
 
@@ -98,6 +120,20 @@ class WebsocketDataUpdater:
         """
         self.systems = systems
 
+    def find_system(self, serial_id: str) -> System | None:
+        """Return the loaded system with the requested serial number, if any.
+
+        Args:
+            serial_id: Carrier system serial number from a websocket message.
+
+        Returns:
+            The matching system object, or ``None`` when it is not loaded.
+        """
+        for system in self.systems:
+            if system.profile.serial == serial_id:
+                return system
+        return None
+
     def carrier_system(self, serial_id: str) -> System:
         """Return the loaded system with the requested serial number.
 
@@ -110,9 +146,9 @@ class WebsocketDataUpdater:
         Raises:
             ValueError: If no loaded system has the requested serial number.
         """
-        for system in self.systems:
-            if system.profile.serial == serial_id:
-                return system
+        system = self.find_system(serial_id)
+        if system is not None:
+            return system
         raise ValueError(f"No carrier_system found for serial {serial_id}")
 
     async def message_handler(self, websocket_message: str) -> None:
@@ -124,6 +160,9 @@ class WebsocketDataUpdater:
         program changes into the raw config payload before rebuilding ``Config``.
         ``diagnostic-device-info`` messages merge their system and unit readings
         into the raw status payload.
+
+        Messages for a device that is not loaded, and zones that are not in the
+        loaded payload, are logged at debug level and skipped.
 
         Each message is merged into a copy of the raw payload, and the stored
         payload is only replaced once the rebuilt model parses. A message that
@@ -147,8 +186,13 @@ class WebsocketDataUpdater:
                 "Received message without deviceId, skipping messageType=%s", message_type
             )
             return
-        system = self.carrier_system(serial_id=serial_id)
+        system = self.find_system(serial_id)
         if system is None:
+            _LOGGER.debug(
+                "Received %s for unknown device %s, skipping",
+                message_type or message_name,
+                serial_id,
+            )
             return
         match message_type or message_name:
             case "InfinityStatus":
@@ -157,8 +201,9 @@ class WebsocketDataUpdater:
                 zones = websocket_message_json.pop("zones", [])
                 for zone in zones:
                     _timestamp = zone.pop("timestamp", None)
-                    stale_zone = find_by_id(status_raw["zones"], zone["id"])
-                    always_merger.merge(stale_zone, zone)
+                    stale_zone = find_zone(status_raw["zones"], zone["id"], "InfinityStatus")
+                    if stale_zone is not None:
+                        always_merger.merge(stale_zone, zone)
                 merged_status = always_merger.merge(status_raw, websocket_message_json)
                 merged_status.update({"utcTime": datetime.now(UTC).isoformat()})
                 system.status = Status(merged_status)
@@ -172,7 +217,9 @@ class WebsocketDataUpdater:
                     _timestamp = zone.pop("timestamp", None)
                     if "id" in zone:
                         zone_id = zone["id"]
-                        stale_zone = find_by_id(config_raw["zones"], zone_id)
+                        stale_zone = find_zone(config_raw["zones"], zone_id, "InfinityConfig")
+                        if stale_zone is None:
+                            continue
                         activities = zone.pop("activities", [])
                         for activity in activities:
                             _timestamp = activity.pop("timestamp", None)

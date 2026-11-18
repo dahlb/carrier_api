@@ -99,7 +99,9 @@ async def test_websocket_message_fixtures_match_update_handler_contract(
 
     await updater.message_handler(message)
 
-    if payload.get("deviceId") is None:
+    loaded_serials = {system.profile.serial for system in systems}
+    if payload.get("deviceId") not in loaded_serials:
+        # Messages without a device id, or for a device that is not loaded, are skipped.
         assert systems[0].status.as_dict() == original_status_payload
         assert systems[0].config.as_dict() == original_config_payload
         return

@@ -17,7 +17,13 @@ from graphql import GraphQLError
 
 from .api_websocket import ApiWebsocket
 from .config import Config
-from .const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
+from .const import (
+    TOKEN_REFRESH_MARGIN_SECONDS,
+    ActivityTypes,
+    FanModes,
+    HeatSourceTypes,
+    SystemModes,
+)
 from .energy import Energy
 from .entry_level import EntryLevelSystem
 from .errors import (
@@ -54,6 +60,51 @@ FETCH_ACCESS_TOKEN_MUTATION = gql(
 """
 )
 
+UPDATE_INFINITY_CONFIG_MUTATION = gql(
+    """
+    mutation updateInfinityConfig($input: InfinityConfigInput!) {
+        updateInfinityConfig(input: $input) {
+            etag
+        }
+    }
+    """
+)
+UPDATE_INFINITY_ZONE_ACTIVITY_MUTATION = gql(
+    """
+    mutation updateInfinityZoneActivity($input: InfinityZoneActivityInput!) {
+        updateInfinityZoneActivity(input: $input) {
+            etag
+        }
+    }
+    """
+)
+UPDATE_INFINITY_ZONE_CONFIG_MUTATION = gql(
+    """
+    mutation updateInfinityZoneConfig($input: InfinityZoneConfigInput!) {
+        updateInfinityZoneConfig(input: $input) {
+            etag
+        }
+    }
+    """
+)
+UPDATE_INFINITY_PROGRAM_DAY_MUTATION = gql(
+    """
+    mutation updateInfinityProgramDay($input: InfinityProgramDayInput!) {
+        updateInfinityProgramDay(input: $input) {
+            id
+            etag
+            zoneId
+            period {
+                id
+                activity
+                time
+                enabled
+            }
+        }
+    }
+    """
+)
+
 
 def _is_auth_transport_error(error: BaseException) -> bool:
     """Return whether a transport error represents Carrier auth rejection.
@@ -71,11 +122,11 @@ def _is_auth_transport_error(error: BaseException) -> bool:
 class ApiConnectionGraphql:
     """Async Carrier GraphQL API connection with token and websocket support."""
 
-    expires_at: datetime = datetime.now(UTC)
-    refresh_token: str | None = None
-    token_type: str | None = None
-    access_token: str | None = None
-    api_websocket: ApiWebsocket | None = None
+    expires_at: datetime
+    refresh_token: str | None
+    token_type: str | None
+    access_token: str | None
+    api_websocket: ApiWebsocket | None
 
     def __init__(
         self,
@@ -91,11 +142,18 @@ class ApiConnectionGraphql:
             client_session: Optional aiohttp session to reuse. The websocket
                 connects through it, and GraphQL requests share its connection
                 pool (see ``_graphql_transport``). A new session is created
-                when omitted.
+                when omitted. ``cleanup`` only closes a session this
+                connection created, never one passed in here.
         """
         self.username = username
         self.password = password
+        self.expires_at = datetime.now(UTC)
+        self.refresh_token = None
+        self.token_type = None
+        self.access_token = None
+        self.api_websocket = None
         self._auth_lock = Lock()
+        self._owns_session = client_session is None
         if client_session is None:
             self.api_session = ClientSession(raise_for_status=False)
         else:
@@ -132,7 +190,19 @@ class ApiConnectionGraphql:
         )
 
     async def cleanup(self) -> None:
-        """Close the underlying aiohttp session owned by the connection."""
+        """Stop the websocket and close the aiohttp session if this connection owns it.
+
+        A session passed in as ``client_session`` belongs to the caller and is
+        left open.
+
+        Raises:
+            CarrierApiConnectionError: If closing the owned session fails.
+        """
+        if self.api_websocket is not None:
+            await self.api_websocket.stop()
+        if not self._owns_session:
+            _LOGGER.debug("Leaving caller-provided aiohttp session open")
+            return
         try:
             await self.api_session.close()
         except (ClientError, TimeoutError, OSError) as error:
@@ -208,8 +278,10 @@ class ApiConnectionGraphql:
     async def check_auth_expiration(self) -> None:
         """Ensure the connection has a valid access token before API use.
 
-        Checks are serialized so concurrent callers never send the same
-        refresh token twice. When Carrier rejects the refresh token, the
+        The token is refreshed ``TOKEN_REFRESH_MARGIN_SECONDS`` before Carrier's
+        stated expiry, so a request in flight does not carry a token that
+        expires mid-request. Checks are serialized so concurrent callers never
+        send the same refresh token twice. When Carrier rejects the refresh token, the
         connection falls back to one password login. Transient refresh
         failures keep the stored token for the next attempt.
 
@@ -220,7 +292,8 @@ class ApiConnectionGraphql:
         async with self._auth_lock:
             if self.refresh_token is None:
                 await self.login()
-            if self.expires_at < datetime.now(UTC):
+            refresh_after = self.expires_at - timedelta(seconds=TOKEN_REFRESH_MARGIN_SECONDS)
+            if refresh_after < datetime.now(UTC):
                 try:
                     await self.refresh_auth_token()
                 except CarrierApiAuthError:
@@ -296,6 +369,10 @@ class ApiConnectionGraphql:
     ) -> dict[str, Any]:
         """Execute an authenticated Carrier GraphQL operation.
 
+        If Carrier rejects the access token with HTTP 401 or 403, for example
+        because it was revoked before its stated expiry, the token is refreshed
+        once and the operation is retried.
+
         Args:
             operation_name: GraphQL operation name to execute.
             query: Parsed GraphQL request.
@@ -303,8 +380,55 @@ class ApiConnectionGraphql:
 
         Returns:
             The decoded GraphQL response data.
+
+        Raises:
+            CarrierApiAuthError: If Carrier still rejects the request after the
+                token is refreshed, or the fallback login is rejected.
         """
         await self.check_auth_expiration()
+        rejected_access_token = self.access_token
+        try:
+            return await self._execute_authed_query(operation_name, query, variable_values)
+        except CarrierApiAuthError:
+            _LOGGER.info(
+                "Carrier rejected the access token during %s; refreshing and retrying once",
+                operation_name,
+            )
+        await self._expire_access_token(rejected_access_token)
+        await self.check_auth_expiration()
+        return await self._execute_authed_query(operation_name, query, variable_values)
+
+    async def _expire_access_token(self, rejected_access_token: str | None) -> None:
+        """Mark a rejected access token as expired so the next check refreshes it.
+
+        Only the token that was rejected is expired. If a concurrent caller has
+        already replaced it, the new token is kept.
+
+        Args:
+            rejected_access_token: Access token Carrier rejected.
+        """
+        async with self._auth_lock:
+            if self.access_token == rejected_access_token:
+                self.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+
+    async def _execute_authed_query(
+        self, operation_name: str, query: GraphQLRequest, variable_values: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Send one authenticated GraphQL operation with the current access token.
+
+        Args:
+            operation_name: GraphQL operation name to execute.
+            query: Parsed GraphQL request.
+            variable_values: Variables to send with the operation.
+
+        Returns:
+            The decoded GraphQL response data.
+
+        Raises:
+            CarrierApiAuthError: If Carrier rejects the access token.
+            CarrierApiConnectionError: If the request fails in transport.
+            CarrierApiGraphqlError: If Carrier returns GraphQL errors.
+        """
         transport = self._graphql_transport(
             "https://dataservice.infinity.iot.carrier.com/graphql",
             headers={"Authorization": f"{self.token_type} {self.access_token}"},
@@ -805,6 +929,29 @@ class ApiConnectionGraphql:
         """
         return await self.update_entry_level_zone(serial, index, schedule_enabled=True)
 
+    async def _run_infinity_mutation(
+        self, operation_name: str, query: GraphQLRequest, variables: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Run a Carrier Infinity mutation, then ask the websocket to reconcile.
+
+        Args:
+            operation_name: GraphQL mutation operation name.
+            query: Parsed GraphQL mutation.
+            variables: GraphQL variables for the mutation.
+
+        Returns:
+            The decoded mutation response.
+        """
+        _LOGGER.debug("%s: %s", operation_name, variables)
+        response = await self.authed_query(
+            operation_name=operation_name, query=query, variable_values=variables
+        )
+        if self.api_websocket is not None:
+            await self.api_websocket.send_reconcile()
+        else:
+            _LOGGER.warning("No API websocket connection")
+        return response
+
     async def _update_infinity_config(self, variables: dict[str, Any]) -> dict[str, Any]:
         """Run the Carrier system-level configuration mutation.
 
@@ -814,53 +961,22 @@ class ApiConnectionGraphql:
         Returns:
             The decoded mutation response.
         """
-        query = gql(
-            """
-            mutation updateInfinityConfig($input: InfinityConfigInput!) {
-                updateInfinityConfig(input: $input) {
-                    etag
-                }
-            }
-            """
+        return await self._run_infinity_mutation(
+            "updateInfinityConfig", UPDATE_INFINITY_CONFIG_MUTATION, variables
         )
-        _LOGGER.debug("updateInfinityConfig: %s", variables)
-        response = await self.authed_query(
-            operation_name="updateInfinityConfig", query=query, variable_values=variables
-        )
-        if self.api_websocket is not None:
-            await self.api_websocket.send_reconcile()
-        else:
-            _LOGGER.warning("No API websocket connection")
-        return response
 
     async def _update_infinity_zone_activity(self, variables: dict[str, Any]) -> dict[str, Any]:
         """Run the Carrier zone activity configuration mutation.
 
         Args:
-            variables: GraphQL variables containing an
-                ``InfinityZoneActivityInput``.
+            variables: GraphQL variables containing an ``InfinityZoneActivityInput``.
 
         Returns:
             The decoded mutation response.
         """
-        query = gql(
-            """
-            mutation updateInfinityZoneActivity($input: InfinityZoneActivityInput!) {
-                updateInfinityZoneActivity(input: $input) {
-                    etag
-                }
-            }
-            """
+        return await self._run_infinity_mutation(
+            "updateInfinityZoneActivity", UPDATE_INFINITY_ZONE_ACTIVITY_MUTATION, variables
         )
-        _LOGGER.debug("updateInfinityZoneActivity: %s", variables)
-        response = await self.authed_query(
-            operation_name="updateInfinityZoneActivity", query=query, variable_values=variables
-        )
-        if self.api_websocket is not None:
-            await self.api_websocket.send_reconcile()
-        else:
-            _LOGGER.warning("No API websocket connection")
-        return response
 
     async def _update_infinity_zone_config(self, variables: dict[str, Any]) -> dict[str, Any]:
         """Run the Carrier zone configuration mutation.
@@ -871,24 +987,9 @@ class ApiConnectionGraphql:
         Returns:
             The decoded mutation response.
         """
-        query = gql(
-            """
-            mutation updateInfinityZoneConfig($input: InfinityZoneConfigInput!) {
-                updateInfinityZoneConfig(input: $input) {
-                    etag
-                }
-            }
-            """
+        return await self._run_infinity_mutation(
+            "updateInfinityZoneConfig", UPDATE_INFINITY_ZONE_CONFIG_MUTATION, variables
         )
-        _LOGGER.debug("updateInfinityZoneConfig: %s", variables)
-        response = await self.authed_query(
-            operation_name="updateInfinityZoneConfig", query=query, variable_values=variables
-        )
-        if self.api_websocket is not None:
-            await self.api_websocket.send_reconcile()
-        else:
-            _LOGGER.warning("No API websocket connection")
-        return response
 
     async def _update_infinity_program_day(self, variables: dict[str, Any]) -> dict[str, Any]:
         """Run the Carrier zone program day mutation.
@@ -899,32 +1000,9 @@ class ApiConnectionGraphql:
         Returns:
             The decoded mutation response.
         """
-        query = gql(
-            """
-            mutation updateInfinityProgramDay($input: InfinityProgramDayInput!) {
-                updateInfinityProgramDay(input: $input) {
-                    id
-                    etag
-                    zoneId
-                    period {
-                        id
-                        activity
-                        time
-                        enabled
-                    }
-                }
-            }
-            """
+        return await self._run_infinity_mutation(
+            "updateInfinityProgramDay", UPDATE_INFINITY_PROGRAM_DAY_MUTATION, variables
         )
-        _LOGGER.debug("updateInfinityProgramDay: %s", variables)
-        response = await self.authed_query(
-            operation_name="updateInfinityProgramDay", query=query, variable_values=variables
-        )
-        if self.api_websocket is not None:
-            await self.api_websocket.send_reconcile()
-        else:
-            _LOGGER.warning("No API websocket connection")
-        return response
 
     async def set_config_mode(self, system_serial: str, mode: SystemModes) -> dict[str, Any]:
         """Update a Carrier system's operating mode.

@@ -662,3 +662,85 @@ async def test_config_message_updates_the_activity_of_the_same_type(
     assert after["home"]["clsp"] == "79"
     for activity_type in set(before) - {"home"}:
         assert after[activity_type] == before[activity_type]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str", ["messages/status_unknown_device.json"], indirect=True
+)
+async def test_message_for_unknown_device_is_skipped(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Skip a message for a device that is not loaded instead of raising.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that must stay unchanged.
+        websocket_message_str: Status message for an unknown device.
+    """
+    original_status_payload = carrier_system.status.as_dict()
+
+    await data_updater.message_handler(websocket_message_str)
+
+    assert carrier_system.status.as_dict() == original_status_payload
+
+
+def test_find_system_returns_none_for_unknown_serial(
+    data_updater: WebsocketDataUpdater,
+) -> None:
+    """Return ``None`` rather than raising for an unknown serial.
+
+    Args:
+        data_updater: Websocket updater under test.
+    """
+    assert data_updater.find_system("missing-serial") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str", ["messages/status_unknown_zone.json"], indirect=True
+)
+async def test_status_message_skips_unknown_zones(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply known zones from a status message and skip unknown ones.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+        websocket_message_str: Status message with an unknown and a known zone.
+    """
+    zone_ids = [zone.api_id for zone in carrier_system.status.zones]
+
+    await data_updater.message_handler(websocket_message_str)
+
+    assert [zone.api_id for zone in carrier_system.status.zones] == zone_ids
+    assert carrier_system.status.zones[0].humidity == 34
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "websocket_message_str", ["messages/config_unknown_zone.json"], indirect=True
+)
+async def test_config_message_skips_unknown_zones(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    websocket_message_str: str,
+) -> None:
+    """Apply known zones from a config message and skip unknown ones.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+        websocket_message_str: Config message with an unknown and a known zone.
+    """
+    zone_ids = [zone.api_id for zone in carrier_system.config.zones]
+
+    await data_updater.message_handler(websocket_message_str)
+
+    assert [zone.api_id for zone in carrier_system.config.zones] == zone_ids
+    assert carrier_system.config.zones[0].hold_activity == ActivityTypes.MANUAL
