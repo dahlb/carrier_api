@@ -1700,6 +1700,54 @@ async def test_graphql_transport_shares_the_session_connection_pool() -> None:
 
 
 @pytest.mark.asyncio
+async def test_graphql_transport_close_closes_its_request_session() -> None:
+    """Close gql's per-request session when the transport closes, but not the shared pool.
+
+    gql skips ``session.close()`` when ``connector_owner`` is False. Left open, each
+    request session is garbage-collected unclosed and aiohttp reports "Unclosed client
+    session" through the event loop's exception handler.
+    """
+    session = ClientSession()
+    try:
+        connection = ApiConnectionGraphql(
+            username="user@example.com", password="password", client_session=session
+        )
+        transport = connection._graphql_transport("https://example.invalid/graphql")
+
+        await transport.connect()
+        request_session = transport.session
+        assert request_session is not None
+        await transport.close()
+
+        assert request_session.closed
+        assert transport.session is None
+        assert session.connector is not None
+        assert not session.connector.closed
+        assert not session.closed
+    finally:
+        await session.close()
+
+
+@pytest.mark.asyncio
+async def test_graphql_transport_close_without_a_shared_connector() -> None:
+    """Close the transport's own session when there is no connector to share."""
+    closed_session = ClientSession()
+    await closed_session.close()
+    connection = ApiConnectionGraphql(
+        username="user@example.com", password="password", client_session=closed_session
+    )
+    transport = connection._graphql_transport("https://example.invalid/graphql")
+
+    await transport.connect()
+    request_session = transport.session
+    assert request_session is not None
+    await transport.close()
+
+    assert request_session.closed
+    assert transport.session is None
+
+
+@pytest.mark.asyncio
 async def test_graphql_transport_falls_back_without_an_open_connector() -> None:
     """Let gql open its own session when the connection's session has no open connector."""
     duck_typed = ApiConnectionGraphql(
