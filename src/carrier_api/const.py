@@ -2,7 +2,7 @@
 
 from enum import Enum
 
-VERSION: str = "3.9.1"
+VERSION: str = "3.9.2"
 
 
 class SystemModes(Enum):
