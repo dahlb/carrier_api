@@ -1024,6 +1024,27 @@ class ApiConnectionGraphql:
             "updateInfinityProgramDay", UPDATE_INFINITY_PROGRAM_DAY_MUTATION, variables
         )
 
+    async def set_system_vacation(self, system_serial: str, enabled: bool) -> dict[str, Any]:
+        """Enable or disable the Carrier system-wide Vacation flag.
+
+        This changes the system-level Vacation state, not a per-zone hold.
+        The existing Vacation dates and comfort setpoints are not modified.
+
+        Args:
+            system_serial: Serial number of the Carrier Infinity system.
+            enabled: Whether system-wide Vacation should be active.
+
+        Returns:
+            The decoded updateInfinityConfig mutation response.
+        """
+        variables = {
+            "input": {
+                "serial": system_serial,
+                "vacat": "on" if enabled else "off",
+            }
+        }
+        return await self._update_infinity_config(variables)
+
     async def set_config_mode(self, system_serial: str, mode: SystemModes) -> dict[str, Any]:
         """Update a Carrier system's operating mode.
 
