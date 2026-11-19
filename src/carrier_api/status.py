@@ -85,6 +85,7 @@ class StatusUnit:
             "static_pressure": self.static_pressure,
             "blower_rpm": self.blower_rpm,
             "outdoor_coil_temperature": self.outdoor_coil_temperature,
+            "compressor_rpm": self.compressor_rpm,
             "discharge_temperature": self.discharge_temperature,
             "suction_pressure": self.suction_pressure,
             "suction_temperature": self.suction_temperature,
