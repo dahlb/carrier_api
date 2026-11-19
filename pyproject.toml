@@ -28,7 +28,6 @@ dependencies = [
     "aiohttp",
     "deepmerge",
     "gql[aiohttp]>=3",
-    "python-dateutil",
 ]
 
 [project.urls]
@@ -46,7 +45,6 @@ pytest = [
     "pytest-asyncio",
     "pytest-cov",
     "pytest-timeout",
-    "types-python-dateutil",
 ]
 dev = [
     { include-group = "lint" },
