@@ -883,3 +883,44 @@ def test_unit_readings_are_cast_from_carrier_string_values(
     assert outdoor_unit is not None
     assert outdoor_unit.suction_pressure == 193.0
     assert outdoor_unit.line_voltage == 246
+
+
+@pytest.mark.parametrize(
+    ("comprpm", "expected"),
+    [
+        (3150, 3150),
+        ("3150", 3150),
+        ({"_": "3150"}, 3150),
+        (0, 0),
+    ],
+)
+def test_outdoor_unit_reads_compressor_rpm(
+    system_response: dict[str, Any], comprpm: Any, expected: int
+) -> None:
+    """Read the outdoor unit compressor speed from ``comprpm``.
+
+    Args:
+        system_response: Parsed systems fixture.
+        comprpm: Raw ``comprpm`` value as Carrier may report it.
+        expected: The integer compressor speed it should map to.
+    """
+    raw_status = system_response["infinitySystems"][0]["status"]
+    status = Status({**raw_status, "odu": {**raw_status["odu"], "comprpm": comprpm}})
+
+    outdoor_unit = status.outdoor_unit
+    assert outdoor_unit is not None
+    assert outdoor_unit.compressor_rpm == expected
+
+
+def test_compressor_rpm_is_none_when_not_reported(system_response: dict[str, Any]) -> None:
+    """Leave the compressor speed unset when the payload does not carry it.
+
+    Args:
+        system_response: Parsed systems fixture.
+    """
+    status = Status(system_response["infinitySystems"][0]["status"])
+
+    assert status.outdoor_unit is not None
+    assert status.outdoor_unit.compressor_rpm is None
+    assert status.indoor_unit is not None
+    assert status.indoor_unit.compressor_rpm is None

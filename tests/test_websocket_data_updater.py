@@ -513,7 +513,10 @@ async def test_diagnostic_device_info_message_handler(
     assert outdoor_unit_raw["oducoiltmp"] == 76
     assert outdoor_unit_raw["sucttemp"] == 78
     assert outdoor_unit_raw["suctsupheat"] == 4.65234375
+    assert outdoor_unit_raw["comprpm"] == 0
     assert outdoor_unit_raw["type"] == "ac2stgeverest"
+    assert carrier_system.status.outdoor_unit is not None
+    assert carrier_system.status.outdoor_unit.compressor_rpm == 0
     assert carrier_system.status.outdoor_temperature == 79
     assert carrier_system.status.blower_rpm == 540
 
