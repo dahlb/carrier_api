@@ -306,6 +306,7 @@ class Config:
     fuel_type: str | None = None
     gas_unit: str | None = None
     fan_enabled: bool | None = None
+    vacation_enabled: bool
     zones: list[ConfigZone]
     uv_enabled: bool | None = None
     humidifier_enabled: bool | None = None
@@ -329,6 +330,7 @@ class Config:
         self.gas_unit = safely_get_json_value(self.raw, "gasunit")
         raw_fan_enabled = safely_get_json_value(self.raw, "cfgfan")
         self.fan_enabled = None if raw_fan_enabled is None else raw_fan_enabled == "on"
+        self.vacation_enabled = safely_get_json_value(self.raw, "vacat") == "on"
         self.uv_enabled = safely_get_json_value(self.raw, "cfguv") == "on"
         self.humidifier_enabled = safely_get_json_value(self.raw, "cfghumid") == "on"
         self.humidifier_heat_target = safely_get_json_value(self.raw, "humidityHome.rhtg", int)
