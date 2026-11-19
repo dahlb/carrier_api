@@ -53,6 +53,7 @@ class StatusUnit:
             status_unit_json, "statpress", float
         )
         self.blower_rpm: int | None = safely_get_json_value(status_unit_json, "blwrpm", int)
+        self.compressor_rpm: int | None = safely_get_json_value(status_unit_json, "comprpm", int)
         self.outdoor_coil_temperature: float | None = safely_get_json_value(
             status_unit_json, "oducoiltmp", float
         )
