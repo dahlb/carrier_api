@@ -241,7 +241,9 @@ def test_status_modes_zone_conditioning_and_serialization(
     assert status.zones[0].as_dict()["current_status_activity_type"] == "wake"
     assert "current_activity" not in status.zones[0].as_dict()
     status.zones[0].current_activity = ActivityTypes.HOME
-    assert status.zones[0].current_status_activity_type == ActivityTypes.HOME
+    # Read the zone again so mypy does not keep the narrowed pre-update type.
+    updated_zone = status.zones[0]
+    assert updated_zone.current_status_activity_type == ActivityTypes.HOME
     assert status.as_dict()["time_stamp"] == datetime(2025, 3, 3, 13, 42, 34, 328000, UTC)
     assert status.as_dict()["uv_lamp_level"] == 100
     assert status.outdoor_unit is not None

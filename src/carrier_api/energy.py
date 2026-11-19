@@ -113,7 +113,7 @@ def _energy_usage_value(raw: dict[str, Any], key: str) -> EnergyUsageValue:
         Integer usage for whole-number payloads, fractional usage as a float,
         or ``None`` when the payload value is absent or invalid.
     """
-    value = safely_get_json_value(raw, key, float)
+    value: float | None = safely_get_json_value(raw, key, float)
     if value is None:
         return None
     if not isfinite(value):

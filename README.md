@@ -239,8 +239,10 @@ The underlying commands are:
 ```bash
 ./.venv/bin/pytest
 ./.venv/bin/prek run --all-files
-./.venv/bin/mypy .
+./.venv/bin/mypy
 ```
+
+`mypy` runs in strict mode (`strict = true` in `pyproject.toml`) over `src/carrier_api` and `tests`. The Lint workflow runs the same check on every push and pull request.
 
 Add or update deterministic pytest coverage for behavior changes. Fixture data for GraphQL and websocket responses lives under `tests/graphql` and `tests/messages`.
 
