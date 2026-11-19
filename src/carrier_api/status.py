@@ -3,8 +3,6 @@
 from datetime import datetime
 from typing import Any
 
-from dateutil.parser import isoparse
-
 from .const import ActivityTypes, FanModes, SystemModes, TemperatureUnits
 from .util import safely_get_json_value
 
@@ -281,7 +279,7 @@ class Status:
         self.static_pressure: int = safely_get_json_value(self.raw, "idu.statpress", float)
         self.outdoor_unit_operational_status: str = safely_get_json_value(self.raw, "odu.opstat")
         self.indoor_unit_operational_status: str = safely_get_json_value(self.raw, "idu.opstat")
-        self.time_stamp = isoparse(safely_get_json_value(self.raw, "utcTime"))
+        self.time_stamp = datetime.fromisoformat(safely_get_json_value(self.raw, "utcTime"))
         self.zones = []
         for zone_json in self.raw["zones"]:
             if safely_get_json_value(zone_json, "enabled") == "on":

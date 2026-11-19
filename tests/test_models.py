@@ -1,11 +1,12 @@
 """Tests for Carrier model serialization and branch behavior."""
 
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 
+import carrier_api
 from carrier_api import (
     ENERGY_USAGE_METRIC_LABELS,
     Config,
@@ -17,7 +18,7 @@ from carrier_api import (
     System,
 )
 from carrier_api.config import ConfigZone, ConfigZoneActivity, active_schedule_periods
-from carrier_api.const import ActivityTypes, FanModes, SystemModes
+from carrier_api.const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes
 from carrier_api.status import StatusUnit, StatusZone
 from carrier_api.util import safely_get_json_value
 
@@ -294,6 +295,41 @@ def test_status_modes_zone_conditioning_and_serialization(
         _ = unknown_zone.zone_conditioning_const
     with pytest.raises(ValueError, match="Unknown mode: fanonly"):
         _ = unknown_status.mode_const
+
+
+@pytest.mark.parametrize(
+    ("utc_time", "expected"),
+    [
+        ("2025-03-03T13:42:34.328Z", datetime(2025, 3, 3, 13, 42, 34, 328000, UTC)),
+        ("2026-09-22T18:42:50.000Z", datetime(2026, 9, 22, 18, 42, 50, tzinfo=UTC)),
+        ("2025-03-03T13:42:34Z", datetime(2025, 3, 3, 13, 42, 34, tzinfo=UTC)),
+        ("2025-03-03T13:42:34.302301+00:00", datetime(2025, 3, 3, 13, 42, 34, 302301, UTC)),
+    ],
+)
+def test_status_time_stamp_parses_carrier_and_websocket_utc_formats(
+    system_response: dict[str, Any], utc_time: str, expected: datetime
+) -> None:
+    """Parse Carrier ``Z`` timestamps and the websocket updater's ``+00:00`` form as UTC.
+
+    Args:
+        system_response: The parsed systems response fixture.
+        utc_time: Raw ``utcTime`` value.
+        expected: The timezone-aware datetime it should parse to.
+    """
+    status_raw = deepcopy(system_response["infinitySystems"][0]["status"])
+    status_raw["utcTime"] = utc_time
+
+    time_stamp = Status(status_raw).time_stamp
+
+    assert time_stamp == expected
+    assert time_stamp is not None
+    assert time_stamp.utcoffset() == timedelta(0)
+
+
+def test_heat_source_types_is_exported_from_package() -> None:
+    """Expose ``HeatSourceTypes`` for ``set_heat_source`` callers."""
+    assert carrier_api.HeatSourceTypes is HeatSourceTypes
+    assert "HeatSourceTypes" in carrier_api.__all__
 
 
 def test_config_schedule_branches_and_serialization(system_response: dict[str, Any]) -> None:

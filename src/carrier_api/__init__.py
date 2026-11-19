@@ -4,7 +4,7 @@ from .api_connection_graphql import ApiConnectionGraphql
 from .api_websocket import ApiWebsocket
 from .api_websocket_data_updater import WebsocketDataUpdater
 from .config import Config, ConfigZone, ConfigZoneActivity
-from .const import ActivityTypes, FanModes, SystemModes, TemperatureUnits
+from .const import ActivityTypes, FanModes, HeatSourceTypes, SystemModes, TemperatureUnits
 from .energy import (
     ENERGY_USAGE_METRIC_LABELS,
     Energy,
@@ -50,6 +50,7 @@ __all__ = [
     "EntryLevelSystem",
     "EntryLevelZone",
     "FanModes",
+    "HeatSourceTypes",
     "Profile",
     "Status",
     "StatusUnit",
