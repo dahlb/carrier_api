@@ -22,3 +22,28 @@ jobs:
 
       - name: Run prek
         uses: j178/prek-action@v3.1.0
+
+  typing:
+    name: Type-check (mypy --strict)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Setup Python 3.14 (with caching)
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: 'pip'
+          cache-dependency-path: |
+            pyproject.toml
+
+      # The dev group adds pytest to the lint tools, since mypy also checks tests.
+      - name: Install lint requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install --group dev -e .
+
+      - name: Run mypy
+        # Checks src/carrier_api and tests with strict = true from pyproject.toml.
+        run: mypy

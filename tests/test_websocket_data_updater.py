@@ -264,7 +264,9 @@ async def test_status_zone_activity_message_handler(
     assert carrier_system.status.zones[0].heat_set_point == 74
     assert carrier_system.status.zones[0].cool_set_point == 78
     await data_updater.message_handler(websocket_message_str)
-    assert carrier_system.status.zones[0].current_status_activity_type == ActivityTypes.HOME
+    # Read the zone again so mypy does not keep the narrowed pre-update type.
+    updated_zone = carrier_system.status.zones[0]
+    assert updated_zone.current_status_activity_type == ActivityTypes.HOME
     assert carrier_system.status.zones[0].heat_set_point == 77
     assert carrier_system.status.zones[0].cool_set_point == 79
     reprocessed_status = Status(raw=carrier_system.status.raw)
@@ -292,7 +294,9 @@ async def test_status_zone_activity_only_message_handler(
     assert carrier_system.status.zones[0].current_status_activity_type == ActivityTypes.WAKE
     assert carrier_system.status.zones[0].fan == FanModes.MED
     await data_updater.message_handler(websocket_message_str)
-    assert carrier_system.status.zones[0].current_status_activity_type == ActivityTypes.SLEEP
+    # Read the zone again so mypy does not keep the narrowed pre-update type.
+    updated_zone = carrier_system.status.zones[0]
+    assert updated_zone.current_status_activity_type == ActivityTypes.SLEEP
     assert carrier_system.status.zones[0].fan == FanModes.MED
     reprocessed_status = Status(raw=carrier_system.status.raw)
     assert reprocessed_status.zones[0].current_status_activity_type == ActivityTypes.SLEEP
@@ -315,7 +319,9 @@ async def test_status_zone_hold_message_handler(
     """
     assert carrier_system.status.zones[0].current_status_activity_type == ActivityTypes.WAKE
     await data_updater.message_handler(websocket_message_str)
-    assert carrier_system.status.zones[0].current_status_activity_type == ActivityTypes.MANUAL
+    # Read the zone again so mypy does not keep the narrowed pre-update type.
+    updated_zone = carrier_system.status.zones[0]
+    assert updated_zone.current_status_activity_type == ActivityTypes.MANUAL
     reprocessed_status = Status(raw=carrier_system.status.raw)
     assert reprocessed_status.zones[0].current_status_activity_type == ActivityTypes.MANUAL
 

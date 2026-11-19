@@ -93,7 +93,7 @@ class ConfigZone:
         )
         self.hold: bool = safely_get_json_value(zone_json, "hold") == "on"
         self.hold_until: str = safely_get_json_value(zone_json, "otmr")
-        self.program_json: dict = safely_get_json_value(zone_json, "program")
+        self.program_json: dict[str, Any] = safely_get_json_value(zone_json, "program")
         self.occupancy_enabled: bool = safely_get_json_value(zone_json, "occEnabled") == "on"
         self.activities = []
         for zone_activity_json in safely_get_json_value(zone_json, "activities"):
@@ -228,13 +228,15 @@ class ConfigZone:
         sunday_0_index_today = int(now.date().strftime("%w"))
         active_periods = self.today_active_periods()
         for active_period in active_periods:
-            hours, minutes = active_period["time"].split(":")
+            period_time: str = active_period["time"]
+            hours, minutes = period_time.split(":")
             if (int(hours) > now.hour) or (int(hours) == now.hour and int(minutes) > now.minute):
-                return active_period["time"]
+                return period_time
         tomorrow_schedule = self.program_json["day"][(sunday_0_index_today + 1) % 7]
         tomorrow_active_schedule_periods = active_schedule_periods(tomorrow_schedule["period"])
         if len(tomorrow_active_schedule_periods) > 0:
-            return tomorrow_active_schedule_periods[0]["time"]
+            first_period_time: str = tomorrow_active_schedule_periods[0]["time"]
+            return first_period_time
         return None
 
     def as_dict(self, status_zone: StatusZone | None = None) -> dict[str, Any]:

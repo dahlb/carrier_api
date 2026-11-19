@@ -67,7 +67,8 @@ carrier_api = ["py.typed"]
 python_version = "3.14"
 files = ["src/carrier_api", "tests"]
 mypy_path = "src"
-check_untyped_defs = true
+# Strict mode, matching ha_carrier. It implies check_untyped_defs.
+strict = true
 explicit_package_bases = true
 pretty = true
 show_error_codes = true

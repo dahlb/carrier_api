@@ -15,7 +15,7 @@ from .system import System
 _LOGGER = getLogger(__name__)
 
 
-def find_by_id(collection: list[dict], item_id: str) -> dict:
+def find_by_id(collection: list[dict[str, Any]], item_id: str) -> dict[str, Any]:
     """Find an item in a Carrier payload collection by id.
 
     Args:
@@ -34,7 +34,9 @@ def find_by_id(collection: list[dict], item_id: str) -> dict:
     raise ValueError(f"id: {item_id} not found in collection")
 
 
-def find_zone(collection: list[dict], zone_id: str, message_type: str) -> dict | None:
+def find_zone(
+    collection: list[dict[str, Any]], zone_id: str, message_type: str
+) -> dict[str, Any] | None:
     """Find a zone in a raw payload, logging and returning ``None`` when absent.
 
     Carrier can report a zone that was not part of the last GraphQL load, for

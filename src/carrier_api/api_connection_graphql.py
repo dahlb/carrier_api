@@ -459,9 +459,10 @@ class ApiConnectionGraphql:
                 fetch_schema_from_transport=False,
                 execute_timeout=GRAPHQL_EXECUTE_TIMEOUT_SECONDS,
             ) as session:
-                return await session.execute(
+                result: dict[str, Any] = await session.execute(
                     query, variable_values=variable_values, operation_name=operation_name
                 )
+                return result
         except TransportQueryError as error:
             raise CarrierApiGraphqlError(
                 f"Carrier GraphQL operation failed: {operation_name}"
