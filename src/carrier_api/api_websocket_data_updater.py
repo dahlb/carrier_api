@@ -58,6 +58,47 @@ def find_zone(
         return None
 
 
+def find_activity(
+    stale_activities: list[dict[str, Any]], activity: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Find the loaded activity that a websocket activity update targets.
+
+    Carrier does not keep activity ids unique within a zone; every activity of
+    a zone can share the same id. An update is therefore matched on its
+    ``type`` when it carries one, and on its ``id`` only when that id is unique
+    within the zone.
+
+    Args:
+        stale_activities: Raw ``activities`` list of the loaded zone.
+        activity: Activity object from an ``InfinityConfig`` message.
+
+    Returns:
+        The matching loaded activity, or ``None`` when the update names a type
+        the zone does not have yet, in which case it is a new activity.
+
+    Raises:
+        ValueError: If the update matches more than one loaded activity, or
+            carries no type and its id is missing or does not match exactly one
+            loaded activity.
+    """
+    activity_type = activity.get("type")
+    if activity_type is not None:
+        matches = [stale for stale in stale_activities if stale.get("type") == activity_type]
+        if len(matches) > 1:
+            raise ValueError(f"activity type: {activity_type} is ambiguous in zone")
+        return matches[0] if matches else None
+    activity_id = activity.get("id")
+    if activity_id is None:
+        raise ValueError("activity update has neither type nor id")
+    matches = [stale for stale in stale_activities if str(stale.get("id")) == str(activity_id)]
+    if len(matches) != 1:
+        raise ValueError(
+            f"activity id: {activity_id} matches {len(matches)} activities in zone, "
+            "and the update has no type"
+        )
+    return matches[0]
+
+
 def unwrap_envelope(websocket_message_json: dict[str, Any]) -> dict[str, Any]:
     """Unwrap a Carrier websocket message delivered inside a ``payload`` envelope.
 
@@ -228,14 +269,8 @@ class WebsocketDataUpdater:
                             _zone_configuration_id = activity.pop("zoneConfigurationId", None)
                             _fan_setting_id = activity.pop("fanSettingId", None)
                             # Every activity of a zone carries the zone's id, so match on type.
-                            stale_activity = next(
-                                (
-                                    stale
-                                    for stale in stale_zone["activities"]
-                                    if stale.get("type") == activity.get("type")
-                                ),
-                                None,
-                            )
+                            # A ValueError here rejects the whole message, leaving raw untouched.
+                            stale_activity = find_activity(stale_zone["activities"], activity)
                             if stale_activity is not None:
                                 always_merger.merge(stale_activity, activity)
                             else:

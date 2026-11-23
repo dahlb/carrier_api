@@ -673,6 +673,149 @@ async def test_config_message_updates_the_activity_of_the_same_type(
         assert after[activity_type] == before[activity_type]
 
 
+def config_message(zone_id: str, activities: list[dict[str, Any]]) -> str:
+    """Build an ``InfinityConfig`` message updating one zone's activities.
+
+    Args:
+        zone_id: Identifier of the zone to update.
+        activities: Activity update objects for that zone.
+
+    Returns:
+        The websocket message text.
+    """
+    return json.dumps(
+        {
+            "messageType": "InfinityConfig",
+            "deviceId": "SERIALXXX",
+            "zones": [{"id": zone_id, "activities": activities}],
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_config_partial_update_with_shared_ids_keeps_other_fields(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+) -> None:
+    """Apply a partial update to its own type when every activity shares an id.
+
+    Reproduces dahlb/carrier_api#150: Away and Manual both have id ``1`` and an
+    update for Manual must not touch Away.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+    """
+    zone = carrier_system.config.raw["zones"][0]
+    activities = {activity["type"]: activity for activity in zone["activities"]}
+    assert {activity["id"] for activity in zone["activities"]} == {"1"}
+    away_before = dict(activities["away"])
+    manual_before = dict(activities["manual"])
+
+    await data_updater.message_handler(
+        config_message(zone["id"], [{"id": "1", "type": "manual", "htsp": "67"}])
+    )
+
+    after = carrier_system.config.raw["zones"][0]["activities"]
+    assert [activity["type"] for activity in after].count("manual") == 1
+    manual_after = next(activity for activity in after if activity["type"] == "manual")
+    away_after = next(activity for activity in after if activity["type"] == "away")
+    assert away_after == away_before
+    assert manual_after == {**manual_before, "htsp": "67"}
+    manual = carrier_system.config.zones[0].find_activity(ActivityTypes.MANUAL)
+    assert manual is not None
+    assert manual.heat_set_point == 67.0
+    assert manual.fan == FanModes(manual_before["fan"])
+
+
+@pytest.mark.asyncio
+async def test_config_update_without_type_matches_a_unique_id(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+) -> None:
+    """Fall back to the activity id when the update has no type and the id is unique.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that receives the update.
+    """
+    zone = carrier_system.config.raw["zones"][0]
+    for index, activity in enumerate(zone["activities"]):
+        activity["id"] = str(index + 10)
+    sleep_activity = next(a for a in zone["activities"] if a["type"] == "sleep")
+
+    await data_updater.message_handler(
+        config_message(zone["id"], [{"id": sleep_activity["id"], "clsp": "77"}])
+    )
+
+    sleep_after = carrier_system.config.zones[0].find_activity(ActivityTypes.SLEEP)
+    assert sleep_after is not None
+    assert sleep_after.cool_set_point == 77.0
+    assert len(carrier_system.config.raw["zones"][0]["activities"]) == len(zone["activities"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("activities", "error"),
+    [
+        ([{"id": "1", "htsp": "67"}], "matches 5 activities"),
+        ([{"id": "99", "htsp": "67"}], "matches 0 activities"),
+        ([{"htsp": "67"}], "neither type nor id"),
+        (
+            [{"id": "1", "type": "home", "htsp": "62"}, {"id": "1", "htsp": "67"}],
+            "matches 5 activities",
+        ),
+    ],
+)
+async def test_config_update_with_unresolvable_activity_is_rejected(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+    activities: list[dict[str, Any]],
+    error: str,
+) -> None:
+    """Reject the whole message when an activity cannot be identified uniquely.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that must stay unchanged.
+        activities: Activity updates for the first zone.
+        error: Expected fragment of the error message.
+    """
+    zone_id = carrier_system.config.raw["zones"][0]["id"]
+    original_config_payload = carrier_system.config.as_dict()
+    original_raw = json.dumps(carrier_system.config.raw, sort_keys=True)
+
+    with pytest.raises(ValueError, match=error):
+        await data_updater.message_handler(config_message(zone_id, activities))
+
+    assert carrier_system.config.as_dict() == original_config_payload
+    assert json.dumps(carrier_system.config.raw, sort_keys=True) == original_raw
+
+
+@pytest.mark.asyncio
+async def test_config_update_for_a_duplicated_type_is_rejected(
+    data_updater: WebsocketDataUpdater,
+    carrier_system: System,
+) -> None:
+    """Reject an update whose type appears more than once in the loaded zone.
+
+    Args:
+        data_updater: Websocket updater under test.
+        carrier_system: Prepared system model that must stay unchanged.
+    """
+    zone = carrier_system.config.raw["zones"][0]
+    duplicate = dict(next(a for a in zone["activities"] if a["type"] == "manual"))
+    zone["activities"].append(duplicate)
+    original_raw = json.dumps(carrier_system.config.raw, sort_keys=True)
+
+    with pytest.raises(ValueError, match="manual is ambiguous"):
+        await data_updater.message_handler(
+            config_message(zone["id"], [{"id": "1", "type": "manual", "htsp": "67"}])
+        )
+
+    assert json.dumps(carrier_system.config.raw, sort_keys=True) == original_raw
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "websocket_message_str", ["messages/status_unknown_device.json"], indirect=True
